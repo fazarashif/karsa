@@ -72,6 +72,28 @@ Set `KARSA_DATA_DIR` to a folder to give a test or development instance its own 
 
 Start with Windows is switched on automatically on first run only for installed copies; builds run from `src-tauri/target/` never register themselves. Toggle it in Settings or the tray menu.
 
+## Making a release
+
+Installers are built by GitHub Actions on a Windows runner ([.github/workflows/release.yml](.github/workflows/release.yml)), so nothing needs to be built or uploaded locally. For version 0.1.1:
+
+1. Bump the version in all three places:
+   - `package.json`: run `npm version 0.1.1 --no-git-tag-version`, which also updates `package-lock.json`.
+   - `src-tauri/Cargo.toml`: edit `version` under `[package]`, then run `cargo update --workspace --offline` in `src-tauri` to update `Cargo.lock`.
+   - `src-tauri/tauri.conf.json`: edit `version`. The installer is named after it.
+2. Update the installer name under [Download](#download) and the [Status](#status) section.
+3. Commit, tag and push the tag:
+
+   ```powershell
+   git commit -am "Karsa 0.1.1"
+   git tag v0.1.1
+   git push origin main v0.1.1
+   ```
+
+4. The tag starts the **Release** workflow. It stops if the tag does not match all three versions; otherwise it builds `Karsa_0.1.1_x64-setup.exe` and attaches it to a draft release whose notes include the installer's SHA-256.
+5. Open the draft on the [Releases](https://github.com/fazarashif/karsa/releases) page, replace the TODO with what changed, and publish it.
+
+To test a build without releasing, open Actions → Release → **Run workflow**. The installer is attached to the run as an artifact for 14 days.
+
 ## How the island works
 
 - The window never resizes: it is a fixed 400 × 540 transparent, always-on-top window anchored to the bottom-right of the primary monitor's work area. Only the web content animates, which keeps the morph smooth.

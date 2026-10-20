@@ -1,0 +1,103 @@
+# Builds the Windows installer on a GitHub runner. Pushing a version tag (v1.2.3) attaches
+# the installer to a draft release for review; running the workflow by hand from the
+# Actions tab only builds it and attaches it to the run as an artifact.
+#
+# The runner has the full MSVC toolchain, so scripts/msvc-env.ps1 is not needed here.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # No dependency cache: a release build should not restore files that another run saved.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      # The installer is named after the version in tauri.conf.json, so a tag that does not
+      # match all three version fields would publish a wrongly named or stale build.
+      - name: Check the version
+        id: version
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            status=0
+            check() {
+              if [ "$2" != "${GITHUB_REF_NAME#v}" ]; then
+                echo "::error file=$1::$1 has version $2, but the tag is $GITHUB_REF_NAME"
+                status=1
+              fi
+            }
+            check package.json "$(node -p "require('./package.json').version")"
+            check src-tauri/tauri.conf.json "$version"
+            check src-tauri/Cargo.toml "$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' src-tauri/Cargo.toml | head -n 1)"
+            exit "$status"
+          fi
+
+      - name: Install npm packages
+        run: npm ci
+
+      - name: Build the installer
+        run: npm run tauri build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: src-tauri/target/release/bundle/nsis/Karsa_${{ steps.version.outputs.version }}_x64-setup.exe
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create a draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          installer="src-tauri/target/release/bundle/nsis/Karsa_${VERSION}_x64-setup.exe"
+          sha256=$(sha256sum "$installer" | cut -d ' ' -f 1)
+          notes="$RUNNER_TEMP/release-notes.md"
+          cat > "$notes" <<EOF
+          ## What's new
+
+          - TODO: list the changes, then publish this draft.
+
+          ## Install
+
+          1. Download **Karsa_${VERSION}_x64-setup.exe** below.
+          2. Run it. It installs for your Windows account only, so it needs no administrator rights.
+          3. The installer is not code-signed, so Windows SmartScreen may say "Windows protected your PC". Click **More info**, then **Run anyway**.
+
+          Requires Windows 11 (64-bit).
+
+          SHA-256 of the installer: \`${sha256}\`
+          EOF
+          gh release create "$GITHUB_REF_NAME" "$installer" --draft --verify-tag \
+            --title "Karsa $VERSION" --notes-file "$notes"
