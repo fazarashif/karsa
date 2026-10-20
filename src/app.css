@@ -1,0 +1,90 @@
+/* Base styles. Design tokens come from design/tokens.css (imported in main.ts). */
+
+:root {
+  font-family: var(--font-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg);
+  color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* Gamelan beat: rows of a state that just appeared enter one beat apart. */
+.beat {
+  animation: beat-in var(--dur-content-in) var(--ease-out) both;
+  animation-delay: calc(var(--delay-content-in) + min(var(--i, 0), 4) * var(--beat));
+}
+
+@keyframes beat-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* Gong: the kawung mark rings once when an alert arrives. */
+.gong {
+  animation: gong var(--dur-gong) var(--ease-out) both;
+  animation-delay: var(--gong-delay, 150ms);
+}
+
+@keyframes gong {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Thin overlay-style scrollbars inside the panel. */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--hairline-strong);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

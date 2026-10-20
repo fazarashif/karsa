@@ -1,0 +1,147 @@
+/* Karsa design tokens v1. Drop-in for src/app.css :root.
+   Names kept from M0: --island-bg --fg --muted --faint --hairline --surface --surface-hover
+   --accent --focus --spring --morph-duration. Changed values are marked "M0:". */
+:root {
+  /* Palette (raw) */
+  --kuningan: #D4A84B;      /* brass gold */
+  --kuningan-hover: #DDB662;
+  --kuningan-pressed: #C29640;
+  --sogan: #C08552;         /* batik sogan brown */
+  --sogan-deep: #8A5A2E;    /* ornaments only, not text */
+  --bata: #D9644A;          /* brick red */
+  --gading: #EFE6D2;        /* ivory */
+  --daun: #A8B46A;          /* leaf green */
+  --abang: #F07A6A;         /* danger red */
+  --iris: #3B2414;          /* eye iris */
+
+  /* Surfaces and text */
+  --island-bg: #000000;
+  --fg: #F5F5F7;
+  --muted: #EBEBF58F;       /* 0.56, 5.6:1 */
+  --faint: #EBEBF580;       /* 0.50, 4.6:1. M0: 0.32 (2.3:1, failed AA) */
+  --disabled: #EBEBF552;    /* 0.32, non-text and disabled only */
+  --hairline: #FFFFFF17;    /* 0.09 */
+  --hairline-strong: #FFFFFF29; /* 0.16 */
+  --surface: #FFFFFF12;     /* 0.07 */
+  --surface-hover: #FFFFFF1F; /* 0.12 */
+  --surface-pressed: #FFFFFF29; /* 0.16 */
+  --track: #FFFFFF1F;       /* progress track */
+  --popover-bg: #141414;
+  --checkbox-border: #EBEBF580;
+  --edge: inset 0 0 0 1px #FFFFFF12;
+  --focus-ring: #EFE6D2B3;
+
+  /* Semantic accents */
+  --accent: var(--kuningan);         /* M0: #ff9f0a */
+  --accent-hover: var(--kuningan-hover);
+  --accent-pressed: var(--kuningan-pressed);
+  --on-accent: #000000;
+  --focus: var(--kuningan);          /* M0: #30d158 */
+  --meeting: var(--sogan);
+  --deadline: var(--bata);
+  --general: var(--gading);
+  --done: var(--daun);
+  --danger: var(--abang);
+  --ornament: var(--sogan-deep);
+  --focus-tint: #D4A84B29;
+  --meeting-tint: #C0855229;
+  --deadline-tint: #D9644A29;
+  --general-tint: #EFE6D21F;
+  --done-tint: #A8B46A29;
+  --danger-tint: #F07A6A29;
+
+  /* Eyes */
+  --eye-sclera: var(--gading);
+  --eye-iris: var(--iris);
+  --eye-glint: #FFFFFF;
+  --eye-blush: #D9644A8C;  /* 0.55 */
+
+  /* Typography */
+  --font-text: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  --fs-caption: 11px;  --lh-caption: 14px;
+  --fs-body: 13px;     --lh-body: 18px;
+  --fs-title: 15px;    --lh-title: 20px;
+  --fs-title-lg: 17px; --lh-title-lg: 22px;
+  --fs-timer: 56px;    --lh-timer: 60px;
+  --fw-regular: 400;
+  --fw-semibold: 600;
+  --tracking-caps: 0.06em;
+  --tracking-greeting: 0.02em;
+  --tracking-pill: 0.01em;
+
+  /* Spacing, 4 px grid */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii */
+  --radius-checkbox: 4px;
+  --radius-icon-button: 8px;
+  --radius-badge: 9px;
+  --radius-control: 10px;
+  --radius-menu: 12px;
+  --radius-button: 14px;
+  --radius-pill: 16px;
+  --radius-card: 22px;
+  --radius-panel: 26px;
+
+  /* Sizes */
+  --window-w: 400px;  --window-h: 540px;
+  --pill-h: 32px;     --pill-min-w: 72px;  --pill-max-w: 220px;
+  --peek-w: 320px;    --peek-h: 172px;
+  --panel-w: 380px;   --panel-h: 520px;
+  --alert-w: 320px;   --alert-h: 112px;
+  --control-h: 36px;
+  --button-h: 28px;
+  --icon-button: 28px;
+  --tab-h: 32px;
+  --icon: 16px;
+  --kawung: 10px;
+  --eyes-w: 28px;     --eyes-h: 14px;
+
+  /* Opacity */
+  --o-disabled: 0.32;
+  --o-watermark: 0.06;
+
+  /* Motion. Damped spring (zeta 0.78, ~2% overshoot), sampled for CSS linear(). */
+  --spring: linear(0, 0.015, 0.0544, 0.1111, 0.1792, 0.254, 0.3317, 0.4093, 0.4847, 0.5562, 0.6228,
+      0.6838, 0.7387, 0.7876, 0.8305, 0.8677, 0.8995, 0.9263, 0.9486, 0.9669, 0.9817, 0.9933, 1.0022,
+      1.0089, 1.0137, 1.0169, 1.0188, 1.0198, 1.0199, 1.0194, 1.0185, 1.0173, 1.0159, 1.0144, 1.0128,
+      1.0113, 1.0098, 1.0084, 1.0071, 1.0059, 1.0049, 1.0039, 1.0031, 1.0024, 1);
+  --morph-duration: 700ms;
+  --radius-duration: 350ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-content-in: 220ms;
+  --dur-content-out: 100ms;
+  --delay-content-in: 90ms;
+  --beat: 60ms;          /* gamelan stagger step */
+  --beat-max: 5;         /* rows after the 5th share the last beat */
+  --dur-blink: 140ms;
+  --dur-gong: 240ms;
+  --dur-tab: 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --morph-duration: 0ms;
+    --radius-duration: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-content-in: 0ms;
+    --dur-content-out: 0ms;
+    --delay-content-in: 0ms;
+    --beat: 0ms;
+    --dur-blink: 0ms;
+    --dur-gong: 0ms;
+    --dur-tab: 0ms;
+  }
+}

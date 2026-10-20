@@ -1,0 +1,45 @@
+[package]
+name = "karsa"
+version = "0.1.0"
+description = "A lightweight dynamic-island companion for Windows"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon", "image-png"] }
+tauri-plugin-autostart = "2.7"
+tauri-plugin-single-instance = "2.5"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dependencies.windows-sys]
+version = "0.61"
+features = [
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_System_Time",
+  "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]
+
+# Only for the folder picker (a COM dialog); already built for WebView2, so this adds no
+# download, just these modules.
+[dependencies.windows]
+version = "0.62"
+features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
