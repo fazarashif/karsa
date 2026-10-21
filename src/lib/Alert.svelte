@@ -11,6 +11,7 @@
     onfocus,
     onreview,
     onmeeting,
+    onrampung,
   }: {
     alert: AlertPayload;
     onsnooze: () => void;
@@ -18,12 +19,13 @@
     onfocus: (action: 'start' | 'skip' | 'stop') => void;
     onreview: () => void;
     onmeeting: () => void;
+    onrampung: (action: 'start' | 'later') => void;
   } = $props();
 </script>
 
 <div class="alert" role="alert">
   <div class="top beat" style="--i: 0">
-    {#if alert.kind === 'focus'}
+    {#if alert.kind === 'focus' || alert.rampung}
       <span class="mark"><Eyes expression="mesem" /></span>
     {:else}
       <span class="mark gong" style:color={typeColor(alert.kind)}><Icon name="ornaments/kawung-mark" size={10} /></span>
@@ -43,6 +45,9 @@
     {:else if alert.focus === 'auto'}
       <button class="btn sm" onclick={() => onfocus('skip')}>Skip</button>
       <button class="btn sm primary" onclick={ondismiss}>Dismiss</button>
+    {:else if alert.rampung}
+      <button class="btn sm" onclick={() => onrampung('later')}>Later</button>
+      <button class="btn sm primary" onclick={() => onrampung('start')}>Start</button>
     {:else if alert.summary}
       <button class="btn sm" onclick={onreview}>Review</button>
       <button class="btn sm primary" onclick={ondismiss}>Dismiss</button>

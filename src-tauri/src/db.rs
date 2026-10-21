@@ -23,7 +23,8 @@ impl Db {
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
-             PRAGMA foreign_keys = ON;",
+             PRAGMA foreign_keys = ON;
+             PRAGMA secure_delete = ON;",
         )?;
         migrate(&conn)?;
         Ok(Self { conn: Mutex::new(conn) })
@@ -121,6 +122,58 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             "BEGIN;
              ALTER TABLE tasks ADD COLUMN note_path TEXT;
              PRAGMA user_version = 4;
+             COMMIT;",
+        )?;
+    }
+    if version < 5 {
+        // Clipboard history: the text is encrypted with the user's Windows account (DPAPI)
+        // and kept for 24 hours. The shelf keeps links to files, not copies.
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE clipboard (
+               id INTEGER PRIMARY KEY,
+               data BLOB NOT NULL,
+               copied_at INTEGER NOT NULL
+             );
+             CREATE INDEX clipboard_by_time ON clipboard(copied_at);
+             CREATE TABLE shelf (
+               id INTEGER PRIMARY KEY,
+               path TEXT NOT NULL UNIQUE,
+               added_at INTEGER NOT NULL
+             );
+             PRAGMA user_version = 5;
+             COMMIT;",
+        )?;
+    }
+    if version < 6 {
+        // "Every N minutes" reminders (drink water, stretch): the interval, and the daily
+        // window in minutes after local midnight, on weekdays or every day. SQLite cannot
+        // change a CHECK constraint in place, so the table is rebuilt with the new repeat.
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE reminders_v6 (
+               id INTEGER PRIMARY KEY,
+               title TEXT NOT NULL,
+               kind TEXT NOT NULL CHECK (kind IN ('general', 'meeting', 'deadline')),
+               at INTEGER NOT NULL,
+               repeat TEXT NOT NULL DEFAULT 'none'
+                 CHECK (repeat IN ('none', 'daily', 'weekdays', 'weekly', 'interval')),
+               lead_min INTEGER NOT NULL DEFAULT 0,
+               snoozed_until INTEGER,
+               fired INTEGER NOT NULL DEFAULT 0,
+               task_id INTEGER UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+               created_at INTEGER NOT NULL,
+               every_min INTEGER,
+               window_from INTEGER,
+               window_until INTEGER,
+               window_days TEXT CHECK (window_days IN ('weekdays', 'daily'))
+             );
+             INSERT INTO reminders_v6 (id, title, kind, at, repeat, lead_min, snoozed_until, fired, task_id, created_at)
+               SELECT id, title, kind, at, repeat, lead_min, snoozed_until, fired, task_id, created_at FROM reminders;
+             DROP TABLE reminders;
+             ALTER TABLE reminders_v6 RENAME TO reminders;
+             CREATE INDEX reminders_pending ON reminders(fired, at);
+             PRAGMA user_version = 6;
              COMMIT;",
         )?;
     }

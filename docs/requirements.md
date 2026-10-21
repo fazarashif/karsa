@@ -43,6 +43,8 @@ After M4 (Notes), idle is 0.05% of one core and ~75 MB; nothing watches the note
 
 A Chromium trace showed most seconds cost 3 frames, but some digits ("20:37") are 0.24 px narrower than others. The pill's rounded width then flipped between 96 and 97 px, which restarted the island's 700 ms width spring at 60 fps and resent the window region. The pill now grows at once but ignores 1 px shrinks (`setPillWidth` in `App.svelte`), so a countdown costs one small repaint per second. The pill's accessible label also counts whole minutes, so the accessibility tree changes once a minute instead of every second.
 
+After M6 (v0.2.0: clipboard listener, media thread, hotkey, 15-minute housekeeping tick), idle measured 0.04% of one core by cycle count and ~68 MB across the six processes, so the new listeners cost nothing measurable while nothing happens. The installer is 1.83 MB.
+
 All background work is event-driven. Timers are scheduled for the next due moment instead of ticking every second; the only per-second work is updating a visible countdown.
 
 ## 3. Platform and stack
@@ -62,6 +64,7 @@ The Rust core is the single source of truth for timers, scheduling and system st
 
 - Bottom-right corner of the primary monitor, just above the taskbar, inside the monitor's work area with a 12 px margin.
 - Anchored at its bottom-right corner, so it grows up and to the left when it expands.
+- Since M7, Settings can move it to the top centre of the screen as a notch, which grows downwards (see 6c).
 - Repositions automatically when the resolution, DPI scale, taskbar size or work area changes.
 - Per-monitor DPI aware.
 - Multi-monitor selection and drag-to-reposition are out of scope for v1.
@@ -86,7 +89,7 @@ When several things compete for the collapsed pill, only the one with the highes
 
 ### 4.3 Interaction
 
-- **Hover:** shows Peek after a 300 ms delay and closes it 400 ms after the cursor leaves. The delay prevents accidental opens when the cursor passes by.
+- **Hover:** shows Peek after a 300 ms delay (450 ms on the notch) and closes it 400 ms after the cursor leaves. The delay prevents accidental opens when the cursor passes by.
 - **Click:** opens Expanded. It stays open until the user clicks outside, presses `Esc` or clicks the pill again.
 - **Alerts:** silent, with no sound. The alert stays expanded for 8 seconds, then collapses into the pill with an accent color until the user acknowledges it.
 - **Focus:** Idle, Live activity, Peek and Alert never take keyboard focus away from the current app. Only Expanded activates the window, because it needs keyboard input.
@@ -201,7 +204,8 @@ As built in M4 (`src-tauri/src/notes.rs`, `src/lib/notes/`, `src/lib/meeting.ts`
 
 ### 5.5 Reminders (manual)
 
-- **Fields:** title, date & time, type (General / Meeting / Deadline), repeat (none, daily, weekdays, weekly), lead time (at time, 5, 10, 15 or 30 min before).
+- **Fields:** title, date & time, type (General / Meeting / Deadline), repeat (none, daily, weekdays, weekly, or every few minutes), lead time (at time, 5, 10, 15 or 30 min before).
+- **Every few minutes** (added after M6, e.g. "drink water"): every 15, 20, 30, 45, 60, 90 or 120 minutes, from a start time until an end time, on weekdays or every day. These nudges have no date or lead time. They never take the pill or Peek's "Next up" (they would always be next), and a slot missed while the PC slept is skipped quietly instead of counted as missed. Stored in `every_min`, `window_from`, `window_until` (minutes after local midnight) and `window_days` (schema v6, which rebuilds the `reminders` table to allow the new repeat).
 - **Alert:** silent expand with Snooze (5 min) and Dismiss. Meeting reminders also offer "New meeting note".
 - **Collapsed pill:** shows a countdown when a reminder is due within 15 minutes.
 - **Reminders tab:** upcoming reminders grouped by day, with deadlines from todos shown alongside (linked to the task).
@@ -229,17 +233,84 @@ As built in M3 (`src-tauri/src/reminders.rs`):
 As built in M5 (`src-tauri/src/settings.rs`, `src/lib/settings/`):
 
 - **Where:** a Settings tab, shown as an icon at the end of the panel's tab row, and the tray's "Settings" item, which opens the panel on it. Changes apply at once; there is no Save button.
-- **General:** Start with Windows (the Windows Run key, kept in step with the tray's check mark either way) and Hide during fullscreen. With hiding off, the island stays on top of fullscreen apps and alerts show there too.
+- **General:** Position (Bottom right or Top, since M7), Start with Windows (the Windows Run key, kept in step with the tray's check mark either way) and Hide during fullscreen. With hiding off, the island stays on top of fullscreen apps and alerts show there too.
 - **Focus:** steppers for Focus (5–120 min, steps of 5), Short break (1–30 min), Long break (5–60 min, steps of 5) and Long break after (2–8 sessions), plus "Start the next phase by itself". A running phase keeps its length; a ready or waiting one changes right away.
 - **Reminders:** "Remind me" (At time, 5, 10, 15 or 30 min before): the starting lead time of new reminders and of new todo deadline reminders. Existing reminders keep their own.
 - **Notes:** the folder path, **Change…** (the Windows folder picker), **Open** (Explorer) and **Use default**. Karsa then reads and saves notes in the new folder; notes already saved are not moved.
-- **Storage:** keys `island.hide_in_fullscreen`, `reminders.default_lead_min`, `notes.folder` and the `focus.*` keys in the `settings` table.
+- **Storage:** keys `island.hide_in_fullscreen`, `island.position` (`corner` or `top`, M7), `reminders.default_lead_min`, `notes.folder` and the `focus.*` keys in the `settings` table.
+
+## 6b. M6 — Personal companion and tools
+
+Everything in M6 stays local and event-driven: no polling, no network, nothing that runs while the island is idle except what Windows tells Karsa (a hotkey, a clipboard change, a media change).
+
+### 6b.1 Personal
+
+- **Name:** optional, in Settings. The panel greeting becomes "Sugeng enjing, Faza".
+- **Weton:** today's pasaran (Legi, Pahing, Pon, Wage, Kliwon) is shown next to the date, e.g. "Tue 20 Oct · Kliwon". It is computed from the date alone (anchor: 17 August 1945 was Jumat Legi). With an optional birthday in Settings, the greeting becomes "Sugeng ambal warsa" on the birthday and "Sugeng wetonan" on the user's weton day (every 35 days).
+- **Paribasan:** a Javanese proverb of the day, with its meaning in English, in the panel's empty states and at the end of the Rampung ritual. The same proverb all day.
+
+### 6b.2 Mripat
+
+- Small mripat eyes sit in Peek and in the panel header. While the cursor moves over the island, the pupils glance toward it. Nothing moves when the cursor is elsewhere.
+- Two new expressions: **bungah** (proud: closed happy eyes and a kuningan sparkle) on the birthday, the weton day and after a finished Rampung; **mrengut** (sulking) for two minutes after a focus session is stopped early.
+
+### 6b.3 Kain (focus record)
+
+- The Focus tab shows the last four weeks as a small woven cloth: one cell per day, a kawung mark whose strength grows with the focus minutes that day, and the current streak of days with at least one finished session.
+
+### 6b.4 Rampung (end of the day)
+
+- At 17:00 on weekdays (Settings: on/off and the time) Karsa offers to wrap up the day, as a silent alert with **Start** and **Later** (30 min). It waits while a focus phase runs and is offered at most once a day. The tray's "Wrap up the day" starts it at any time.
+- The ritual is a panel view: today's finished tasks and focus minutes; open tasks due today or overdue, each with "Tomorrow" (or "Move all to tomorrow"); tomorrow's reminders and deadlines; then **Rampung**, which closes the panel with the proverb of the day and makes the mripat bungah until midnight.
+
+### 6b.5 Quick capture
+
+- A global hotkey, **Win+Shift+K** by default (changeable in Settings, or off), opens the panel straight into a capture box from any app. Enter saves a task to Inbox; Tab switches to Note, which saves a new note. Esc closes and returns focus to the app the user was in.
+
+### 6b.6 Shelf (clipboard and files)
+
+A "Shelf" icon tab next to Settings, with two lists:
+
+- **Clipboard:** text copied in the last 24 hours, newest first, up to 200 items, with search. Click copies an item back. Items are stored in the database encrypted with the user's Windows account (DPAPI) and deleted after 24 hours. Copies marked as private by the copying app (password managers set `ExcludeClipboardContentFromMonitorProcessing` or `CanIncludeInClipboardHistory = 0`) are never recorded. **Pause** stops recording until resumed; **Clear** deletes everything. Settings can turn the feature off.
+- **Files:** drop files on the island, paste files copied in Explorer (Ctrl+V or **Paste** in Shelf › Files), or pick them with **Add files…**. The shelf keeps links to the originals (no copies). Items can be dragged back out to any app, copied (then pasted as files), opened, shown in Explorer or removed. A missing original is shown as missing.
+
+### 6b.7 Media
+
+- When something plays through Windows' media controls (Spotify, a browser tab, Media Player…), Peek shows a "Playing" row with the title, artist and previous / play-pause / next buttons, and grows by that one row.
+- The pill shows the track (album art and title) only while it plays and nothing else needs the pill: no alert, no reminder or deadline today, no focus timer. A track left paused does not take the pill. Settings can turn this off.
+
+### 6b.8 As built (M6)
+
+- **Personal** (`src/lib/jawa.ts`): pasaran from the day number since the anchor, checked against published calendars (Selasa Kliwon on 20 October 2026, Sabtu Legi on 1 January 2000). 28 proverbs rotate by day.
+- **Mripat** (`Eyes.svelte`, `mood.svelte.ts`, `pointer.svelte.ts`): the pupils and highlights shift up to ~1.3 px toward the cursor, updated at most once per frame and only on `mousemove` over the island. Mood order: mrengut (2 min after an early stop) › merem (22:00–05:00) › bungah (birthday, weton day, Rampung done today) › mesem (today's tasks all done) › melek. The two new expressions are app-made SVGs in `src/assets/eyes`, drawn in the design system's style.
+- **Kain** (`focus/Kain.svelte`, `focus_history`): 28 cells, Monday first; levels at 1–24, 25–74 and 75+ minutes, coloured sogan-deep, sogan and kuningan.
+- **Rampung** (`rampung/Rampung.svelte`): the offer is checked on the minute clock (no timer of its own); "Tomorrow" keeps a timed deadline's time of day. The tray has "Wrap up the day".
+- **Quick capture** (`capture/Capture.svelte`): the hotkey is registered with `RegisterHotKey` on the hook thread's hidden window, so Windows posts `WM_HOTKEY` only when it is pressed. Settings offers a few shortcuts (Win+Shift+K, Ctrl+Alt+K, Alt+Shift+K, Ctrl+Shift+Space, Ctrl+Alt+Space, Off) and says when another app already holds one. It waits while a fullscreen app hides the island.
+- **Clipboard** (`clipboard.rs`, `hooks.rs`): `AddClipboardFormatListener` on the same window; only `CF_UNICODETEXT` up to 20,000 characters; `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` and `CanIncludeInClipboardHistory = 0` are skipped. Text is stored with `CryptProtectData` (current user, plus a fixed entropy). Copying the newest item again moves it instead of adding it; copying back from the history is not recorded again. A 15-minute tick on the hook thread deletes items older than 24 hours; the database runs with `secure_delete`, and Clear also checkpoints the WAL.
+- **Files** (`shelf.rs`): Karsa registers its own OLE drop target (`ShelfDropTarget`) on the island window and the other windows it owns, when the island first shows, 1.5 s later, and after every fullscreen app. Tauri's own drop handling turned out to refuse drops from Explorer (red "no" cursor), because WebView2's drop target, which rejects outside drops, ended up registered on the island's content window. `shelf_drop_status` reports which windows have Karsa's target. Dropped, pasted (`CF_HDROP` from the clipboard) and picked files all land in the same table. Over the pill the island grows into a 320 × 112 drop target; over the open panel it switches to Shelf › Files. Dragging out uses `SHDoDragDrop` with the shell's own data object (from `SHCreateShellItemArrayFromIDLists`), and Copy puts the same object on the clipboard (`OleSetClipboard`), so Explorer, Outlook and Teams accept the files.
+- **Media** (`media.rs`): `GlobalSystemMediaTransportControlsSessionManager` on its own thread, which waits for the current-session, media-properties and playback-info events. Album art is read once per track and sent as a data URL; app ids become friendly names ("Chrome", "Spotify").
+
+## 6c. M7 — The notch
+
+Karsa can sit at the top of the screen instead of the bottom-right corner, like the Dynamic Island: a small black notch hanging from the top edge that grows down into Peek, alerts and the panel. Settings › General › Position switches between **Bottom right** (the default) and **Top**, at once and without a restart.
+
+- **Proportions:** the notch is kept small because it sits over title bars, tabs and the search boxes some apps centre there. Idle it is 80 × 26 (the corner pill is 72 × 32), with 24 px eyes, square top corners flush with the top edge and 12 px bottom corners. Text in it (an alert, a reminder due within 15 minutes, the focus countdown, what is playing) is capped at 200 px wide instead of 220.
+- **Idle shows the eyes:** a later reminder or deadline today stays in Peek instead of widening the notch all day, so the idle notch is the mripat unless something needs attention now.
+- **Bigger states:** Peek, alerts, the drop target and the panel keep their corner sizes, centred under the notch, with square top corners so they read as the notch growing.
+- **Hover:** Peek opens after 450 ms instead of 300 ms, because the pointer often crosses the top centre on its way to tabs and title bars.
+
+### 6c.1 As built (M7)
+
+- **Placement** (`island.rs`): `set_position` stores the choice and calls `place()` again. On top, the 400 × 540 window is centred on the primary monitor horizontally and sits at the top of the work area (below anything docked there), with no margin. The window region is anchored to the middle of the window's top edge, with the 10 px overshoot padding below and on both sides. The window still never resizes; a display, DPI or work-area change re-places it in whichever position is chosen.
+- **Layout** (`App.svelte`, `Pill.svelte`): the island and its content layer are anchored at `left: 50%` with `translate: -50% 0` and grow from the top centre. The notch's width is rounded up to an even number so its edges stay on whole pixels; the pill-width hysteresis allows 2 px for that. Its edge (`--edge-notch`) leaves out the top side, which meets the screen edge.
+- **Tokens:** `--notch-h`, `--notch-min-w`, `--notch-max-w`, `--radius-notch` and `--edge-notch` in `design/tokens.css` (and `tokens.json`); `NOTCH` and `TIMING.hoverOpenNotch` in `config.ts`.
 
 ## 7. Data and storage
 
 | Data | Location |
 |---|---|
 | Lists, tasks, subtasks, reminders, Pomodoro sessions, settings | `%APPDATA%\app.karsa.desktop\karsa.db` (SQLite, WAL mode, schema version in `PRAGMA user_version`) |
+| Clipboard history (24 h) and the file shelf (links) | Same database, tables `clipboard` (text encrypted with DPAPI) and `shelf` (schema v5) |
 | Notes | `<notes folder>\*.md` |
 | Meeting notes | `<notes folder>\Meetings\YYYY-MM-DD Title.md` |
 
@@ -252,15 +323,13 @@ The notes folder can be pointed at OneDrive or Google Drive for backup and sync.
 
 ## 9. Out of scope for v1
 
-- Water and stand-up reminders
-- Clipboard history (24 hours)
+- Dedicated water and stand-up trackers (an "every few minutes" reminder covers the nudge)
 - Calendar sync (ICS, Google Calendar, Outlook)
-- Global hotkey and quick capture
-- Media controls
-- Linking Pomodoro sessions to tasks; daily summary
+- Linking Pomodoro sessions to tasks
 - Meeting recording, transcription and AI summaries
 - Drag-to-reposition, choosing a monitor
-- File shelf
+
+(Clipboard history, quick capture, media controls and the file shelf moved into M6.)
 
 ## 10. Milestones
 
@@ -272,6 +341,8 @@ The notes folder can be pointed at OneDrive or Google Drive for backup and sync.
 | M3 | Reminders | Manual reminders with repeat, lead time, snooze, missed-reminder handling; todo deadlines linked | Done 2026-10-19 |
 | M4 | Notes & meeting notes | Markdown notes with search, the meeting template, and the "Open full" window | Done 2026-10-19 |
 | M5 | Polish | Settings screen, installer, performance pass against the budget | Done 2026-10-19 (cold start above target while the CPU is throttled; see section 2) |
+| M6 | Personal companion and tools | Name, weton and paribasan; expressive mripat; focus kain and streak; Rampung ritual; quick capture hotkey; 24 h clipboard history; file shelf; media controls; idle cost unchanged | Done 2026-10-20 (v0.2.0) |
+| M7 | The notch | Settings choose Bottom right or Top; on top, a slim notch with the eyes when idle that grows downwards into every state; switching needs no restart | Done 2026-10-21, open to revision after use |
 
 ## 11. Decision log
 
@@ -298,3 +369,15 @@ The notes folder can be pointed at OneDrive or Google Drive for backup and sync.
 | 2026-10-19 | Changing the notes folder | Point Karsa at the new folder without moving files; moving notes is left to Explorer, where the user can see what happens |
 | 2026-10-19 | "Show test alert" in the tray | Development builds only |
 | 2026-10-19 | Countdown cost | Keep seconds in the pill (as designed) but stop 1 px width flips from restarting the width spring; 4.4% → 0.8% of a core |
+| 2026-10-20 | Clipboard history storage | Text only, on disk for 24 hours, encrypted with the user's Windows account; private copies skipped; Pause and Clear on the Shelf |
+| 2026-10-20 | File shelf | Links to the originals, not copies; drag out and Copy use the shell's own data object |
+| 2026-10-20 | Media in the pill | Only while playing and nothing else needs the pill; Peek always has the controls |
+| 2026-10-20 | Rampung timing | 17:00 on weekdays by default, waits for a running focus phase, "Later" = 30 minutes, at most once a day |
+| 2026-10-20 | Where Clipboard and Files live | One "Shelf" icon tab with two halves, so the tab row still fits |
+| 2026-10-20 | Drops from Explorer refused | Karsa registers its own drop target on its windows after they show, instead of relying on Tauri's; paste and "Add files…" added as other ways in |
+| 2026-10-20 | Interval reminders ("drink water every 30 min, 07:00–17:00, weekdays") | A fifth repeat with a daily window; nudges stay out of the pill and skip missed slots |
+| 2026-10-20 | Unreadable dropdown lists | Every `<option>` gets the popover colours; the native list opens in its own popup and ignored the page's dark scheme |
+| 2026-10-20 | Default quick-capture shortcut | Win+Shift+K, chosen from a short list in Settings instead of a key recorder (Windows keeps many Win combinations for itself) |
+| 2026-10-21 | Notch shape | Flush with the top edge (square top corners), like a camera notch, rather than a pill floating below it; the top few pixels of the screen are not left as a sliver above it |
+| 2026-10-21 | Notch size | 80 × 26 idle, text capped at 200 px; Peek, alerts and the panel keep their sizes so their content needs no second layout |
+| 2026-10-21 | Later reminders in the notch | Left to Peek; the notch widens only for what needs attention now (alerts, reminders within 15 minutes, focus, playing media) |

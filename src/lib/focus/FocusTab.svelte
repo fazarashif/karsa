@@ -3,6 +3,7 @@
   import { focus, formatCountdown } from '../focus.svelte';
   import { formatTime } from '../format.svelte';
   import Icon from '../Icon.svelte';
+  import Kain from './Kain.svelte';
 
   const s = $derived(focus.state);
   const of = $derived(s.settings.sessionsPerCycle);
@@ -79,6 +80,8 @@
       </div>
     {/if}
   </div>
+
+  <Kain />
 
   <div class="stats">
     <span class="caps">Today</span>
@@ -183,7 +186,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 4px 0;
+    padding: 10px 4px 0;
     border-top: 1px solid var(--hairline);
   }
 

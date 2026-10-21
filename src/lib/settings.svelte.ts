@@ -4,23 +4,70 @@ import { inTauri, on } from './bridge';
 export type AppSettings = {
   autostart: boolean;
   hideInFullscreen: boolean;
+  /** Bottom-right above the taskbar, or a notch at the top centre. */
+  islandPosition: 'corner' | 'top';
   /** Lead time new reminders and todo deadlines start with. */
   reminderLeadMin: number;
   notesFolder: string;
   /** False while the notes folder is the default `Documents\Karsa\Notes`. */
   notesFolderCustom: boolean;
   version: string;
+  /** Shown in the greeting; empty when not set. */
+  name: string;
+  /** Local "YYYY-MM-DD", or empty. */
+  birthday: string;
+  rampungEnabled: boolean;
+  /** Local "HH:MM", weekdays. */
+  rampungTime: string;
+  /** Local "YYYY-MM-DD" of the last finished Rampung. */
+  rampungDoneDate: string;
+  /** "Win+Shift+K" and the like; empty when quick capture has no hotkey. */
+  captureHotkey: string;
+  /** False when another app already holds the hotkey. */
+  captureHotkeyOk: boolean;
+  clipboardEnabled: boolean;
+  clipboardPaused: boolean;
+  /** Show what is playing in the pill when nothing else needs it. */
+  mediaInPill: boolean;
 };
 
-export type SettingsPatch = Partial<Pick<AppSettings, 'autostart' | 'hideInFullscreen' | 'reminderLeadMin'>>;
+export type SettingsPatch = Partial<
+  Pick<
+    AppSettings,
+    | 'autostart'
+    | 'hideInFullscreen'
+    | 'islandPosition'
+    | 'reminderLeadMin'
+    | 'name'
+    | 'birthday'
+    | 'rampungEnabled'
+    | 'rampungTime'
+    | 'rampungDoneDate'
+    | 'captureHotkey'
+    | 'clipboardEnabled'
+    | 'clipboardPaused'
+    | 'mediaInPill'
+  >
+>;
 
 let current = $state<AppSettings>({
   autostart: true,
   hideInFullscreen: true,
+  islandPosition: 'corner',
   reminderLeadMin: 0,
   notesFolder: 'C:\\Users\\you\\Documents\\Karsa\\Notes',
   notesFolderCustom: false,
   version: '0.1.0',
+  name: '',
+  birthday: '',
+  rampungEnabled: true,
+  rampungTime: '17:00',
+  rampungDoneDate: '',
+  captureHotkey: 'Win+Shift+K',
+  captureHotkeyOk: true,
+  clipboardEnabled: true,
+  clipboardPaused: false,
+  mediaInPill: true,
 });
 let error = $state<string | null>(null);
 

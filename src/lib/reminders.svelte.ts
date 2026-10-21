@@ -2,7 +2,15 @@ import { invoke } from '@tauri-apps/api/core';
 import { inTauri, on } from './bridge';
 
 export type ReminderKind = 'general' | 'meeting' | 'deadline';
-export type Repeat = 'none' | 'daily' | 'weekdays' | 'weekly';
+export type Repeat = 'none' | 'daily' | 'weekdays' | 'weekly' | 'interval';
+
+/** An "every N minutes" reminder's window, in minutes after local midnight. */
+export type Interval = {
+  everyMin: number;
+  windowFrom: number;
+  windowUntil: number;
+  windowDays: 'weekdays' | 'daily';
+};
 
 export type Reminder = {
   id: number;
@@ -16,6 +24,11 @@ export type Reminder = {
   fired: boolean;
   /** Set for a todo task's linked deadline. */
   taskId: number | null;
+  /** "Every N minutes" reminders only. */
+  everyMin: number | null;
+  windowFrom: number | null;
+  windowUntil: number | null;
+  windowDays: 'weekdays' | 'daily' | null;
 };
 
 export type ReminderInput = {
@@ -25,7 +38,7 @@ export type ReminderInput = {
   at: number;
   repeat: Repeat;
   leadMin: number;
-};
+} & Partial<Interval>;
 
 let items = $state<Reminder[]>([]);
 let error = $state<string | null>(null);
@@ -66,13 +79,31 @@ function sameDay(a: number, b: Date) {
   return d.getFullYear() === b.getFullYear() && d.getMonth() === b.getMonth() && d.getDate() === b.getDate();
 }
 
-/** The next reminder still ahead today: the pill's "next up" and Peek's row. */
+/** The next reminder still ahead today: the pill's "next up" and Peek's row. "Every N
+    minutes" nudges are left out; they would always be next. */
 export function nextToday(list: Reminder[], now: Date) {
-  return list.filter((r) => r.at >= now.getTime() && sameDay(r.at, now)).sort((a, b) => a.at - b.at)[0];
+  return list
+    .filter((r) => r.repeat !== 'interval' && r.at >= now.getTime() && sameDay(r.at, now))
+    .sort((a, b) => a.at - b.at)[0];
 }
 
 export const kindLabel: Record<ReminderKind, string> = { general: 'General', meeting: 'Meeting', deadline: 'Deadline' };
-export const repeatLabel: Record<Repeat, string> = { none: 'None', daily: 'Daily', weekdays: 'Weekdays', weekly: 'Weekly' };
+export const repeatLabel: Record<Repeat, string> = {
+  none: 'None',
+  daily: 'Daily',
+  weekdays: 'Weekdays',
+  weekly: 'Weekly',
+  interval: 'Every few minutes…',
+};
+
+const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** "Every 30 min · 07:00–17:00 · weekdays" */
+export function intervalLabel(r: Pick<Reminder, 'everyMin' | 'windowFrom' | 'windowUntil' | 'windowDays'>) {
+  if (r.everyMin === null || r.windowFrom === null || r.windowUntil === null) return '';
+  const every = r.everyMin % 60 === 0 ? `${r.everyMin / 60} h` : `${r.everyMin} min`;
+  return `Every ${every} · ${hhmm(r.windowFrom)}–${hhmm(r.windowUntil)} · ${r.windowDays === 'daily' ? 'every day' : 'weekdays'}`;
+}
 
 // ---- Browser preview -----------------------------------------------------
 // Keeps the list in memory for design work; nothing fires in a plain browser.
@@ -85,9 +116,15 @@ function preview(cmd: string, a: Record<string, any>): Reminder[] {
     const input = a.input as ReminderInput;
     if (!input.title.trim()) throw new Error('Title cannot be empty');
     if (input.repeat === 'none' && input.at <= Date.now()) throw new Error('Pick a time in the future');
+    if (input.repeat === 'interval' && (input.windowFrom ?? 0) >= (input.windowUntil ?? 0)) throw new Error('The end time must be after the start time');
+    const interval =
+      input.repeat === 'interval'
+        ? { everyMin: input.everyMin ?? 30, windowFrom: input.windowFrom ?? 420, windowUntil: input.windowUntil ?? 1020, windowDays: input.windowDays ?? 'weekdays' }
+        : { everyMin: null, windowFrom: null, windowUntil: null, windowDays: null };
+    const at = input.repeat === 'interval' ? Date.now() + (input.everyMin ?? 30) * 60_000 : input.at;
     const existing = list.find((r) => r.id === input.id);
-    if (existing) Object.assign(existing, { ...input, id: existing.id, title: input.title.trim() });
-    else list.push({ ...input, id: previewId++, title: input.title.trim(), snoozedUntil: null, fired: false, taskId: null });
+    if (existing) Object.assign(existing, { ...input, ...interval, at, id: existing.id, title: input.title.trim() });
+    else list.push({ ...input, ...interval, at, id: previewId++, title: input.title.trim(), snoozedUntil: null, fired: false, taskId: null });
   } else if (cmd === 'reminders_delete') {
     list = list.filter((r) => r.id !== a.id);
   } else if (cmd === 'reminders_snooze') {

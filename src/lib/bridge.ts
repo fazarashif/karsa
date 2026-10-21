@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { FocusState } from './focus.svelte';
+import type { MediaState } from './media.svelte';
 import type { Reminder } from './reminders.svelte';
 import type { AppSettings } from './settings.svelte';
 import type { Snapshot } from './todo.svelte';
@@ -19,14 +20,23 @@ export type AlertPayload = {
   at?: number;
   /** Several reminders at once (or missed ones): offers Review instead of Snooze. */
   summary?: boolean;
+  /** The end-of-day invitation: offers Later and Start. */
+  rampung?: boolean;
 };
 
 /** Events sent by the Rust core. */
 type Events = {
   'island://blur': null;
-  /** Opens the panel, optionally on a tab (the tray's "Settings"). */
-  'island://open': 'settings' | null;
+  /** Opens the panel, optionally on Settings or the Rampung ritual (from the tray). */
+  'island://open': 'settings' | 'rampung' | null;
   'island://alert': AlertPayload;
+  /** The quick-capture hotkey was pressed. */
+  'island://capture': null;
+  'clipboard://changed': null;
+  'shelf://changed': null;
+  /** Files dragged over the island (the core's own drop target); on drop they are already kept. */
+  'shelf://drag': { kind: 'enter' | 'leave' | 'drop'; count: number; kept: number };
+  'media://changed': MediaState;
   'island://fullscreen': boolean;
   'focus://state': FocusState;
   'reminders://changed': Reminder[];

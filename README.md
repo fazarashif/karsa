@@ -1,18 +1,18 @@
 # Karsa
 
-A lightweight "dynamic island" companion for Windows 11: a small black pill in the bottom-right corner that grows into todos, a Pomodoro timer, notes, meeting notes and reminders.
+A lightweight "dynamic island" companion for Windows 11: a small black pill in the bottom-right corner, or a notch at the top of the screen, that grows into todos, a Pomodoro timer, notes, meeting notes and reminders, with quick capture from any app, a 24-hour clipboard history, a file shelf and media controls.
 
 <img src="design/screens/10-expanded-todo.png" alt="The Karsa panel open on the Todo tab" width="400">
 
 ## Download
 
-1. Go to [Releases](https://github.com/fazarashif/karsa/releases/latest) and download `Karsa_0.1.0_x64-setup.exe`.
+1. Go to [Releases](https://github.com/fazarashif/karsa/releases/latest) and download `Karsa_<version>_x64-setup.exe`.
 2. Run it. It installs for your Windows account only, so it needs no administrator rights.
 3. The installer is not code-signed, so Windows SmartScreen may say "Windows protected your PC". Click **More info**, then **Run anyway**.
 
-Karsa needs Windows 11 (64-bit). It appears as a small pill above the taskbar on the right; hover it for a summary, click it to open the panel. Right-click the tray icon for Settings and Quit. It starts with Windows; turn that off in Settings.
+Karsa needs Windows 11 (64-bit). It appears as a small pill above the taskbar on the right (or as a notch at the top centre: Settings → Position); hover it for a summary, click it to open the panel. Press **Win+Shift+K** in any app to jot down a task or a note. Right-click the tray icon for Settings, "Wrap up the day" and Quit. It starts with Windows; turn that off in Settings.
 
-Everything stays on your PC: Karsa makes no network requests. Tasks, reminders and settings are in `%APPDATA%\app.karsa.desktop`, and notes are plain Markdown files in `Documents\Karsa\Notes` (or the folder you choose in Settings).
+Everything stays on your PC: Karsa makes no network requests. Tasks, reminders, settings and the clipboard history are in `%APPDATA%\app.karsa.desktop` (copied text is encrypted with your Windows account and deleted after 24 hours; turn it off in Settings), and notes are plain Markdown files in `Documents\Karsa\Notes` (or the folder you choose in Settings).
 
 To uninstall, use Windows Settings → Apps → Installed apps → Karsa. That removes the app, its shortcut and its Start with Windows entry. Your data stays unless you tick "Delete the application data" in the uninstaller; notes are never deleted.
 
@@ -22,7 +22,7 @@ See [docs/requirements.md](docs/requirements.md) for the full v1 requirements an
 
 ## Status
 
-**v0.1.0 — all v1 milestones (M0–M5) done.**
+**v0.2.0: v1 (M0–M5) plus M6, the personal companion and tools.**
 
 - **Island (M0):** Idle, Peek, Expanded and Alert states, click-through, focus handling, fullscreen hiding, tray icon, autostart.
 - **Design system v1:** black island with Javanese accents (kawung, aksara watermark, *mripat* eyes, Javanese greetings).
@@ -31,6 +31,8 @@ See [docs/requirements.md](docs/requirements.md) for the full v1 requirements an
 - **Reminders (M3):** one-off and repeating reminders with lead time and snooze, linked todo deadlines, a missed-reminders summary, and the next reminder in the pill and Peek.
 - **Notes (M4):** Markdown notes and structured meeting notes (when, topic, attendees, notes, action items) in a folder of `.md` files, with search, "Add to todo" for action items, conflict detection for edits made elsewhere, and an "Open full" window.
 - **Settings and polish (M5):** a Settings tab (Start with Windows, hide during fullscreen, Pomodoro lengths, default reminder lead time, notes folder), a per-user installer, and a performance pass that cut a running countdown from 4.4% to 0.8% of one core.
+- **Personal companion and tools (M6):** your name, today's pasaran and a Javanese proverb of the day; *mripat* that glance at the cursor and react (proud, sulking, sleepy); the focus "kain" (four weeks of focus woven from kawung marks) and streak; the Rampung end-of-day ritual; quick capture with Win+Shift+K; a 24-hour encrypted clipboard history; a file shelf you drop or paste files onto and drag them out of; media controls in Peek and the pill; and "every few minutes" reminders, such as drinking water every 30 minutes on weekdays from 07:00 to 17:00.
+- **The notch (M7, next release):** Settings → Position puts Karsa at the top centre of the screen as a slim notch (80 × 26, the eyes when idle) that grows downwards into Peek, alerts and the panel, instead of the bottom-right corner.
 
 Release build, measured: ~0% CPU and ~75 MB RAM while idle (including WebView2), 0.8% of one core while a focus countdown runs, 60 fps morphs, a 1.8 MB installer, and the pill visible 1–2.5 s after launch depending on CPU speed. Details in [docs/requirements.md](docs/requirements.md#2-performance-budget).
 
@@ -96,7 +98,7 @@ To test a build without releasing, open Actions → Release → **Run workflow**
 
 ## How the island works
 
-- The window never resizes: it is a fixed 400 × 540 transparent, always-on-top window anchored to the bottom-right of the primary monitor's work area. Only the web content animates, which keeps the morph smooth.
+- The window never resizes: it is a fixed 400 × 540 transparent, always-on-top window anchored to the bottom-right of the primary monitor's work area, or to the top centre for the notch. Only the web content animates, which keeps the morph smooth.
 - Everything outside the visible box is click-through: the UI reports the box size and the core clips the window to it with a window region (`SetWindowRgn`). The region grows before a morph and shrinks once it settles.
 - The window is `WS_EX_NOACTIVATE` in every state except Expanded, so hovering or clicking the island never steals keyboard focus from the app you are using.
 - Fullscreen apps are detected from shell notifications and foreground-window changes (`src-tauri/src/hooks.rs`), not by polling; the island hides until they exit.

@@ -143,6 +143,7 @@ Each screen lists its tokens and assets. Screens are numbered as in `screens/`.
 
 - **Container:** height 32, `--radius-pill`, padding `0 16 0 14`, gap 7. Text is body-strong with 0.01em tracking and tabular nums. Width hugs content, clamped to 72–220. The label ellipsizes.
 - **Size change:** min width drops from 120 to 72 because the eyes pill has no text. Text pills hug their content, and the shortest real label still exceeds 120. In `config.ts`, change the CSS `min-width` to 72.
+- **Notch (M7):** with Settings › Position on Top, the pill hangs from the top edge of the screen: height 26 (`--notch-h`), width 80–200 (`--notch-min-w`, `--notch-max-w`), padding `0 14 0 12`, square top corners and `--radius-notch` (12) at the bottom, eyes 24 × 12, and `--edge-notch` (the edge without its top side). Every larger state keeps its size, centred under the notch with square top corners. Peek opens after 450 ms there.
 
 | # | Variant | Content | Tokens / assets |
 |---|---|---|---|

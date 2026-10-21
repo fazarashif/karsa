@@ -1,9 +1,9 @@
 //! The island window: placement, click-through, focus, and fullscreen detection.
 //!
 //! The window never resizes. It covers the largest state and sits in the bottom-right
-//! corner of the primary monitor's work area. A window region limits it to the visible
-//! box, so everywhere else clicks go straight to the apps underneath. Only the web
-//! content animates.
+//! corner of the primary monitor's work area, or at the top centre as a notch (Settings
+//! → Position). A window region limits it to the visible box, so everywhere else clicks
+//! go straight to the apps underneath. Only the web content animates.
 //!
 //! Visibility, focusability and click-through are managed here with Win32 calls, never
 //! through the windowing library's setters: those re-apply every window style and call
@@ -38,10 +38,21 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 
 /// Logical size of the island window. Must match `WINDOW` in src/lib/config.ts.
 pub const WINDOW_SIZE: (f64, f64) = (400.0, 540.0);
-/// Gap between the island and the edges of the work area, in logical px.
+/// Gap between the corner island and the edges of the work area, in logical px.
+/// The notch has none: it hangs from the top edge.
 const MARGIN: f64 = 12.0;
-/// Extra room above and left of the box so the spring overshoot is not clipped.
+/// Extra room on the open sides of the box (above and left in the corner, below and on
+/// both sides as a notch) so the spring overshoot is not clipped.
 const REGION_PADDING: f64 = 10.0;
+
+/// Where the island sits.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    /// Bottom-right, above the taskbar.
+    Corner,
+    /// Top centre, flush with the top of the work area, growing downwards.
+    Top,
+}
 
 /// Posted to ourselves to hand activation back to the user's app (see `WM_ACTIVATE`).
 const WM_RETURN_FOREGROUND: u32 = WM_APP + 2;
@@ -57,6 +68,8 @@ static READY: AtomicBool = AtomicBool::new(false);
 static HIDDEN: AtomicBool = AtomicBool::new(false);
 /// Settings → "Hide during fullscreen".
 static HIDE_IN_FULLSCREEN: AtomicBool = AtomicBool::new(true);
+/// Settings → Position: true for the notch at the top.
+static AT_TOP: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy)]
 struct Placement {
@@ -91,6 +104,15 @@ pub fn hides_in_fullscreen() -> bool {
     HIDE_IN_FULLSCREEN.load(Ordering::Relaxed)
 }
 
+/// Moves the island at once. The UI follows from `settings://changed` and re-anchors its
+/// content to match.
+pub fn set_position(position: Position) {
+    let top = position == Position::Top;
+    if AT_TOP.swap(top, Ordering::Relaxed) != top {
+        place();
+    }
+}
+
 pub fn init(window: &WebviewWindow) -> tauri::Result<()> {
     ISLAND_HWND.store(window.hwnd()?.0 as isize, Ordering::Relaxed);
     // The app in front when Karsa starts, so activation can always be handed back.
@@ -111,7 +133,8 @@ pub fn ui_ready() {
     }
 }
 
-/// Moves the window to the bottom-right of the primary monitor's work area.
+/// Moves the window to the bottom-right of the primary monitor's work area, or to the
+/// top centre of the monitor for the notch.
 pub fn place() {
     let hwnd = hwnd();
     if hwnd.is_null() {
@@ -127,8 +150,13 @@ pub fn place() {
         let width = (WINDOW_SIZE.0 * scale).round() as i32;
         let height = (WINDOW_SIZE.1 * scale).round() as i32;
         let margin = (MARGIN * scale).round() as i32;
-        let x = info.rcWork.right - margin - width;
-        let y = info.rcWork.bottom - margin - height;
+        let (x, y) = if AT_TOP.load(Ordering::Relaxed) {
+            // Centred on the screen like a camera notch, below anything docked at the top.
+            let m = info.rcMonitor;
+            (m.left + (m.right - m.left - width) / 2, info.rcWork.top)
+        } else {
+            (info.rcWork.right - margin - width, info.rcWork.bottom - margin - height)
+        };
         SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 
         *lock(&PLACEMENT) = Placement { width, height, scale, monitor: monitor as isize };
@@ -141,25 +169,37 @@ pub fn set_box_size(width: f64, height: f64) {
     apply_region();
 }
 
-/// Clips the window to the visible box, which is anchored to its bottom-right corner.
-/// Outside the region the window neither draws nor receives clicks.
+/// Clips the window to the visible box, which is anchored to the window's bottom-right
+/// corner, or to the middle of its top edge for the notch. Outside the region the window
+/// neither draws nor receives clicks.
 fn apply_region() {
     let p = *lock(&PLACEMENT);
     let (width, height) = *lock(&BOX_SIZE);
     if p.width == 0 {
         return;
     }
-    let (left, top) = if width > 0.0 && height > 0.0 {
-        let padding = (REGION_PADDING * p.scale).round() as i32;
+    let padding = REGION_PADDING * p.scale;
+    let (w, h) = (width * p.scale, height * p.scale);
+    let (left, top, right, bottom) = if width <= 0.0 || height <= 0.0 {
+        (0, 0, 0, 0) // empty until the UI reports its size
+    } else if AT_TOP.load(Ordering::Relaxed) {
+        let middle = f64::from(p.width) / 2.0;
         (
-            (p.width - (width * p.scale).round() as i32 - padding).max(0),
-            (p.height - (height * p.scale).round() as i32 - padding).max(0),
+            ((middle - w / 2.0 - padding).floor() as i32).max(0),
+            0,
+            ((middle + w / 2.0 + padding).ceil() as i32).min(p.width),
+            ((h + padding).ceil() as i32).min(p.height),
         )
     } else {
-        (p.width, p.height) // empty until the UI reports its size
+        (
+            (p.width - w.round() as i32 - padding.round() as i32).max(0),
+            (p.height - h.round() as i32 - padding.round() as i32).max(0),
+            p.width,
+            p.height,
+        )
     };
     unsafe {
-        let region = CreateRectRgn(left, top, p.width, p.height);
+        let region = CreateRectRgn(left, top, right, bottom);
         // The system owns the region after this call.
         SetWindowRgn(hwnd(), region, 1);
     }

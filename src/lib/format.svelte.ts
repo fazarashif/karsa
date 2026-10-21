@@ -25,15 +25,6 @@ export function formatDate(d: Date | number) {
   return date.format(d).replace(',', '');
 }
 
-/** Javanese time-of-day greeting shown above the date in the panel. */
-export function greeting(now: Date) {
-  const h = now.getHours();
-  if (h >= 5 && h < 11) return 'Sugeng enjing';
-  if (h >= 11 && h < 15) return 'Sugeng siang';
-  if (h >= 15 && h < 18) return 'Sugeng sonten';
-  return 'Sugeng dalu';
-}
-
 const DAY = 24 * 60 * 60 * 1000;
 
 function startOfDay(d: Date | number) {

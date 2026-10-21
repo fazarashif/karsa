@@ -1948,7 +1948,7 @@ dependencies = [
 
 [[package]]
 name = "karsa"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rusqlite",
  "serde",
@@ -1958,6 +1958,7 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
  "windows",
+ "windows-core",
  "windows-sys 0.61.2",
 ]
 

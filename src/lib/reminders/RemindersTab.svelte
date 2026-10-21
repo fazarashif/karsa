@@ -3,7 +3,7 @@
   import { onEscape } from '../escape';
   import { dayFromToday, formatDate, formatTime } from '../format.svelte';
   import Icon from '../Icon.svelte';
-  import { kindLabel, reminders, repeatLabel, type Reminder, type ReminderKind } from '../reminders.svelte';
+  import { intervalLabel, kindLabel, reminders, repeatLabel, type Reminder, type ReminderKind } from '../reminders.svelte';
   import { todo } from '../todo.svelte';
   import { panel } from '../ui.svelte';
   import ReminderForm from './ReminderForm.svelte';
@@ -28,7 +28,8 @@
   function metaFor(r: Reminder) {
     const meta: Row['meta'] = [];
     if (r.taskId !== null) meta.push({ icon: 'link', text: 'From Todo' });
-    if (r.repeat !== 'none') meta.push({ icon: 'repeat', text: repeatLabel[r.repeat] });
+    if (r.repeat === 'interval') meta.push({ icon: 'repeat', text: intervalLabel(r) });
+    else if (r.repeat !== 'none') meta.push({ icon: 'repeat', text: repeatLabel[r.repeat] });
     if (r.leadMin > 0) meta.push({ icon: 'clock', text: `${r.leadMin} min before` });
     if (r.snoozedUntil !== null) meta.push({ icon: 'snooze', text: `Snoozed · ${formatTime(r.snoozedUntil)}` });
     return meta;

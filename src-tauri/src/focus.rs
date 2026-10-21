@@ -326,3 +326,15 @@ pub fn focus_stats(db: State<'_, Db>, since: i64) -> Result<FocusStats, String> 
         )
         .map_err(|e| e.to_string())
 }
+
+/// End time and length (ms) of each focus session finished since `since`, oldest first.
+/// The UI groups them by local day for the kain and the streak.
+#[tauri::command]
+pub fn focus_history(db: State<'_, Db>, since: i64) -> Result<Vec<(i64, i64)>, String> {
+    let conn = db.conn();
+    let mut stmt = conn
+        .prepare("SELECT ended_at, duration_ms FROM focus_sessions WHERE ended_at >= ?1 ORDER BY ended_at")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([since], |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?;
+    rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+}

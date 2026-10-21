@@ -36,6 +36,12 @@ let state = $state<FocusState>({
   settings,
 });
 let today = $state({ sessions: 0, minutes: 0 });
+/** Finished focus sessions of the last HISTORY_DAYS days: [ended at, length in ms]. */
+const HISTORY_DAYS = 120;
+let history = $state<[number, number][]>([]);
+/** True for two minutes after a focus session is stopped before its end (mripat mrengut). */
+let sulking = $state(false);
+let sulkTimer: ReturnType<typeof setTimeout> | undefined;
 /** Wall clock, refreshed once per second only while a phase is running. */
 let now = $state(Date.now());
 let ticker: ReturnType<typeof setTimeout> | undefined;
@@ -55,6 +61,10 @@ function apply(next: FocusState) {
 async function refreshStats() {
   const since = dayFromToday(0);
   today = inTauri ? await invoke('focus_stats', { since }) : previewStats(since);
+  const historySince = dayFromToday(-HISTORY_DAYS);
+  history = inTauri
+    ? await invoke<[number, number][]>('focus_history', { since: historySince })
+    : [...previewHistory(), ...previewSessions.filter((s) => s.endedAt >= historySince).map((s): [number, number] => [s.endedAt, s.minutes * 60_000])];
 }
 
 async function command(cmd: string) {
@@ -71,6 +81,9 @@ export const focus = {
   get today() {
     return today;
   },
+  get history() {
+    return history;
+  },
   /** Time left right now; recomputed every second while running. */
   get remainingMs() {
     return state.status === 'running' && state.endsAt !== null ? Math.max(0, state.endsAt - now) : state.remainingMs;
@@ -81,12 +94,22 @@ export const focus = {
   get isBreak() {
     return state.phase !== 'focus';
   },
+  get sulking() {
+    return sulking;
+  },
   load: async () => apply(inTauri ? await invoke<FocusState>('focus_state') : $state.snapshot(state)),
   start: () => command('focus_start'),
   pause: () => command('focus_pause'),
   resume: () => command('focus_resume'),
   skip: () => command('focus_skip'),
-  stop: () => command('focus_stop'),
+  stop: () => {
+    if (state.phase === 'focus' && (state.status === 'running' || state.status === 'paused')) {
+      sulking = true;
+      clearTimeout(sulkTimer);
+      sulkTimer = setTimeout(() => (sulking = false), 120_000);
+    }
+    return command('focus_stop');
+  },
   /** Saves timer settings; a running phase keeps its length. */
   updateSettings: async (patch: Partial<FocusState['settings']>) => {
     if (inTauri) return apply(await invoke<FocusState>('focus_update_settings', { patch }));
@@ -115,6 +138,12 @@ export function formatCountdown(ms: number) {
 
 const previewSessions: { endedAt: number; minutes: number }[] = [];
 let previewEnd: ReturnType<typeof setTimeout> | undefined;
+
+/** A few weeks of made-up sessions so the kain has something to show in a browser. */
+function previewHistory(): [number, number][] {
+  const minutes = [0, 25, 50, 0, 100, 75, 25, 0, 0, 50, 125, 25, 50, 0, 25, 75, 50, 0, 25, 50];
+  return minutes.flatMap((m, i) => (m ? [[dayFromToday(-(minutes.length - i)) + 15 * 3_600_000, m * 60_000]] : []));
+}
 
 function previewStats(since: number) {
   const done = previewSessions.filter((s) => s.endedAt >= since);

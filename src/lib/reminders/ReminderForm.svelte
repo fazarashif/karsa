@@ -22,6 +22,18 @@
   let kind = $state<ReminderKind>(existing?.kind ?? 'general');
   let repeat = $state<Repeat>(existing?.repeat ?? 'none');
   let leadMin = $state(existing?.leadMin ?? untrack(() => settings.current.reminderLeadMin));
+  // "Every few minutes": drink water every 30 minutes, 07:00–17:00, on weekdays.
+  let everyMin = $state(existing?.everyMin ?? 30);
+  let windowFrom = $state(existing?.windowFrom ?? 7 * 60);
+  let windowUntil = $state(existing?.windowUntil ?? 17 * 60);
+  let windowDays = $state<'weekdays' | 'daily'>(existing?.windowDays ?? 'weekdays');
+  const interval = $derived(repeat === 'interval');
+  const everyOptions = [15, 20, 30, 45, 60, 90, 120];
+  const toInput = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  const fromInput = (value: string) => {
+    const [h, m] = value.split(':').map(Number);
+    return h * 60 + m;
+  };
   let confirmDelete = $state(false);
   let titleInput = $state<HTMLInputElement>();
 
@@ -44,8 +56,10 @@
   });
 
   async function save() {
-    const at = fromInputs(date, time);
-    if (await reminders.save({ id, title, kind, at, repeat, leadMin })) onback();
+    const input = interval
+      ? { id, title, kind, at: Date.now(), repeat, leadMin: 0, everyMin, windowFrom, windowUntil, windowDays }
+      : { id, title, kind, at: fromInputs(date, time), repeat, leadMin };
+    if (await reminders.save(input)) onback();
   }
 
   async function remove() {
@@ -75,6 +89,7 @@
       </span>
     </label>
 
+    {#if !interval}
     <div class="pair">
       <div class="field">
         <span class="caps">Date</span>
@@ -101,6 +116,7 @@
         />
       </div>
     </div>
+    {/if}
 
     {#if !linked}
       <div class="field">
@@ -126,16 +142,65 @@
           <Icon name="chevron-down" size={12} />
         </span>
       </label>
+
+      {#if interval}
+        <div class="pair">
+          <label class="field">
+            <span class="caps">Every</span>
+            <span class="input">
+              <select bind:value={everyMin} aria-label="Every">
+                {#each everyOptions as minutes (minutes)}
+                  <option value={minutes}>{minutes % 60 === 0 ? `${minutes / 60} hour${minutes > 60 ? 's' : ''}` : `${minutes} minutes`}</option>
+                {/each}
+              </select>
+              <Icon name="chevron-down" size={12} />
+            </span>
+          </label>
+          <div class="field">
+            <span class="caps">On</span>
+            <div class="seg" role="radiogroup" aria-label="On">
+              <button role="radio" aria-checked={windowDays === 'weekdays'} class:on={windowDays === 'weekdays'} onclick={() => (windowDays = 'weekdays')}>Weekdays</button>
+              <button role="radio" aria-checked={windowDays === 'daily'} class:on={windowDays === 'daily'} onclick={() => (windowDays = 'daily')}>Every day</button>
+            </div>
+          </div>
+        </div>
+        <div class="pair">
+          <div class="field">
+            <span class="caps">From</span>
+            <PickerField
+              type="time"
+              value={toInput(windowFrom)}
+              display={formatTime(fromInputs(toDateInput(Date.now()), toInput(windowFrom)))}
+              placeholder="07:00"
+              label="From"
+              onchange={(value) => value && (windowFrom = fromInput(value))}
+            />
+          </div>
+          <div class="field">
+            <span class="caps">Until</span>
+            <PickerField
+              type="time"
+              value={toInput(windowUntil)}
+              display={formatTime(fromInputs(toDateInput(Date.now()), toInput(windowUntil)))}
+              placeholder="17:00"
+              label="Until"
+              onchange={(value) => value && (windowUntil = fromInput(value))}
+            />
+          </div>
+        </div>
+      {/if}
     {/if}
 
-    <div class="field">
-      <span class="caps">Remind me</span>
-      <div class="chips">
-        {#each leads as lead (lead.minutes)}
-          <button class="chip" class:on={leadMin === lead.minutes} onclick={() => (leadMin = lead.minutes)}>{lead.label}</button>
-        {/each}
+    {#if !interval}
+      <div class="field">
+        <span class="caps">Remind me</span>
+        <div class="chips">
+          {#each leads as lead (lead.minutes)}
+            <button class="chip" class:on={leadMin === lead.minutes} onclick={() => (leadMin = lead.minutes)}>{lead.label}</button>
+          {/each}
+        </div>
       </div>
-    </div>
+    {/if}
 
     {#if reminders.error}<p class="error meta">{reminders.error}</p>{/if}
   </div>

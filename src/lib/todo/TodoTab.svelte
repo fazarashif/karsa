@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { clock } from '../clock.svelte';
   import { onEscape } from '../escape';
   import Icon from '../Icon.svelte';
+  import { paribasan } from '../jawa';
   import { todo, topLevel } from '../todo.svelte';
   import { panel } from '../ui.svelte';
   import ListManager from './ListManager.svelte';
@@ -20,6 +22,7 @@
   const tasks = $derived(topLevel(todo.tasks, list.id));
   const open = $derived(tasks.filter((t) => !t.done));
   const completed = $derived(tasks.filter((t) => t.done));
+  const proverb = $derived(paribasan(clock.now));
 
   // Another tab asked to show a task (e.g. a "From Todo" reminder).
   $effect(() => {
@@ -94,8 +97,8 @@
     {#if tasks.length === 0}
       <div class="empty">
         <span style:color="var(--ornament)"><Icon name="ornaments/kawung-mark" size={24} /></span>
-        <span class="proverb">Alon-alon waton kelakon</span>
-        <span class="muted">Slowly, as long as it gets done.</span>
+        <span class="proverb">{proverb.text}</span>
+        <span class="muted">{proverb.meaning}</span>
         <span class="faint small">Type above and press Enter.</span>
       </div>
     {:else}

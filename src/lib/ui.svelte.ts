@@ -1,4 +1,4 @@
-export type Tab = 'todo' | 'focus' | 'notes' | 'reminders' | 'settings';
+export type Tab = 'todo' | 'focus' | 'notes' | 'reminders' | 'shelf' | 'settings';
 
 export type NoteRequest = { path: string } | { meeting: { title: string; at: number } };
 
@@ -11,6 +11,14 @@ let openTaskId = $state<number | null>(null);
 let noteRequest = $state<NoteRequest | null>(null);
 /** Set by the app shell so a view can close the panel (e.g. after "Open full"). */
 let collapse: () => void = () => {};
+/** Set by the app shell: closes the panel and gives focus back to the app the user was in. */
+let closeAndReturn: () => void = () => {};
+/** The Rampung ritual covers the tabs while it runs. */
+let rampung = $state(false);
+/** Quick capture (the global hotkey) covers the tabs while it is open. */
+let capture = $state(false);
+/** Which half of the Shelf tab is showing. */
+let shelf = $state<'clipboard' | 'files'>('clipboard');
 
 export const panel = {
   get tab() {
@@ -45,6 +53,30 @@ export const panel = {
   startMeeting(title: string, at: number) {
     noteRequest = { meeting: { title, at } };
     tab = 'notes';
+  },
+  get rampung() {
+    return rampung;
+  },
+  set rampung(value: boolean) {
+    rampung = value;
+  },
+  get shelf() {
+    return shelf;
+  },
+  set shelf(value: 'clipboard' | 'files') {
+    shelf = value;
+  },
+  get capture() {
+    return capture;
+  },
+  set capture(value: boolean) {
+    capture = value;
+  },
+  get closeAndReturn() {
+    return closeAndReturn;
+  },
+  set closeAndReturn(fn: () => void) {
+    closeAndReturn = fn;
   },
   get collapse() {
     return collapse;

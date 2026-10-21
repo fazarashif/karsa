@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::{now_ms, Db};
-use crate::localtime::{add_local_days, format_time, is_weekend};
+use crate::localtime::{add_local_days, format_time, is_weekend, local_to_ms, to_local};
 use crate::ISLAND;
 
 const MISSED_AFTER_MS: i64 = 60_000;
@@ -36,6 +36,8 @@ pub enum Repeat {
     Daily,
     Weekdays,
     Weekly,
+    /// Every `every_min` minutes within a daily window (see `Window`).
+    Interval,
 }
 
 impl Kind {
@@ -63,6 +65,7 @@ impl Repeat {
             Repeat::Daily => "daily",
             Repeat::Weekdays => "weekdays",
             Repeat::Weekly => "weekly",
+            Repeat::Interval => "interval",
         }
     }
 
@@ -71,8 +74,53 @@ impl Repeat {
             "daily" => Repeat::Daily,
             "weekdays" => Repeat::Weekdays,
             "weekly" => Repeat::Weekly,
+            "interval" => Repeat::Interval,
             _ => Repeat::None,
         }
+    }
+}
+
+/// When an "every N minutes" reminder goes off: every `every` minutes from `from` until
+/// `until` (minutes after local midnight, both included), on weekdays or every day.
+#[derive(Clone, Copy)]
+struct Window {
+    every: i64,
+    from: i64,
+    until: i64,
+    weekdays_only: bool,
+}
+
+impl Window {
+    fn of(r: &Reminder) -> Option<Window> {
+        Some(Window {
+            every: r.every_min?,
+            from: r.window_from?,
+            until: r.window_until?,
+            weekdays_only: r.window_days.as_deref() == Some("weekdays"),
+        })
+    }
+
+    /// The first slot strictly after `after`, looking up to two weeks ahead.
+    fn next_slot(self, after: i64) -> Option<i64> {
+        let at_minutes = |day: i64, minutes: i64| {
+            let t = to_local(day);
+            local_to_ms(t.wYear, t.wMonth, t.wDay, (minutes / 60) as u16, (minutes % 60) as u16)
+        };
+        let every = self.every.max(1) * 60_000;
+        let mut day = after;
+        for _ in 0..14 {
+            let start = at_minutes(day, self.from);
+            let end = at_minutes(day, self.until);
+            if !(self.weekdays_only && is_weekend(start)) {
+                let steps = if after < start { 0 } else { (after - start) / every + 1 };
+                let slot = start + steps * every;
+                if slot <= end {
+                    return Some(slot);
+                }
+            }
+            day = add_local_days(start, 1);
+        }
+        None
     }
 }
 
@@ -90,9 +138,16 @@ pub struct Reminder {
     fired: bool,
     /// Set for a todo task's linked deadline.
     task_id: Option<i64>,
+    /// "Every N minutes" reminders only.
+    every_min: Option<i64>,
+    window_from: Option<i64>,
+    window_until: Option<i64>,
+    /// "weekdays" or "daily".
+    window_days: Option<String>,
 }
 
-const COLUMNS: &str = "id, title, kind, at, repeat, lead_min, snoozed_until, fired, task_id";
+const COLUMNS: &str =
+    "id, title, kind, at, repeat, lead_min, snoozed_until, fired, task_id, every_min, window_from, window_until, window_days";
 
 fn read(r: &Row) -> rusqlite::Result<Reminder> {
     Ok(Reminder {
@@ -105,6 +160,10 @@ fn read(r: &Row) -> rusqlite::Result<Reminder> {
         snoozed_until: r.get(6)?,
         fired: r.get(7)?,
         task_id: r.get(8)?,
+        every_min: r.get(9)?,
+        window_from: r.get(10)?,
+        window_until: r.get(11)?,
+        window_days: r.get(12)?,
     })
 }
 
@@ -126,7 +185,8 @@ fn next_occurrence(at: i64, repeat: Repeat, lead_ms: i64, after: i64) -> Option<
     // Ten years of daily occurrences is plenty for catching up after a long absence.
     for _ in 0..3700 {
         next = match repeat {
-            Repeat::None => return None,
+            // Interval reminders are scheduled from their window (Window::next_slot).
+            Repeat::None | Repeat::Interval => return None,
             Repeat::Daily => add_local_days(next, 1),
             Repeat::Weekly => add_local_days(next, 7),
             Repeat::Weekdays => {
@@ -261,7 +321,11 @@ fn fire_due(app: &AppHandle, now: i64) -> bool {
                     params![r.repeat == Repeat::None, r.id],
                 )
             } else {
-                match next_occurrence(r.at, r.repeat, r.lead_min * 60_000, now) {
+                let next = match r.repeat {
+                    Repeat::Interval => Window::of(r).and_then(|w| w.next_slot(now)),
+                    _ => next_occurrence(r.at, r.repeat, r.lead_min * 60_000, now),
+                };
+                match next {
                     Some(next) => tx.execute("UPDATE reminders SET at = ?1 WHERE id = ?2", params![next, r.id]),
                     None => tx.execute("UPDATE reminders SET fired = 1 WHERE id = ?1", [r.id]),
                 }
@@ -276,14 +340,22 @@ fn fire_due(app: &AppHandle, now: i64) -> bool {
         due
     };
     if !due.is_empty() {
+        // An "every N minutes" nudge is never "missed": shortly late it alerts as usual,
+        // and once its next slot has come it is skipped (the PC was asleep or off).
         let fired: Vec<(Reminder, bool)> = due
             .into_iter()
-            .map(|r| {
-                let missed = fire_time(&r) < now - MISSED_AFTER_MS;
-                (r, missed)
+            .filter_map(|r| {
+                let late = now - fire_time(&r);
+                if r.repeat == Repeat::Interval {
+                    let every = r.every_min.unwrap_or(30) * 60_000;
+                    return (late <= every).then_some((r, false));
+                }
+                Some((r, late > MISSED_AFTER_MS))
             })
             .collect();
-        let _ = app.emit_to(ISLAND, "island://alert", alert_for(&fired, now));
+        if !fired.is_empty() {
+            let _ = app.emit_to(ISLAND, "island://alert", alert_for(&fired, now));
+        }
         emit_list(app);
     }
     true
@@ -375,6 +447,25 @@ pub struct ReminderInput {
     at: i64,
     repeat: Repeat,
     lead_min: i64,
+    /// For `Repeat::Interval`.
+    every_min: Option<i64>,
+    window_from: Option<i64>,
+    window_until: Option<i64>,
+    window_days: Option<String>,
+}
+
+/// Checks an "every N minutes" window from the form.
+fn input_window(input: &ReminderInput) -> Result<Window, String> {
+    let every = input.every_min.unwrap_or(30);
+    let from = input.window_from.unwrap_or(7 * 60);
+    let until = input.window_until.unwrap_or(17 * 60);
+    if !(5..=240).contains(&every) {
+        return Err("Pick an interval between 5 minutes and 4 hours".into());
+    }
+    if !(0..24 * 60).contains(&from) || !(0..24 * 60).contains(&until) || from >= until {
+        return Err("The end time must be after the start time".into());
+    }
+    Ok(Window { every, from, until, weekdays_only: input.window_days.as_deref() != Some("daily") })
 }
 
 /// Creates or updates a reminder. A todo task's linked deadline only takes the lead time
@@ -412,25 +503,38 @@ pub fn reminders_save(app: AppHandle, db: State<'_, Db>, input: ReminderInput) -
                     return Err("Title cannot be empty".into());
                 }
                 let title: String = title.chars().take(500).collect();
-                let mut at = input.at;
-                if input.repeat == Repeat::None && at <= now {
-                    return Err("Pick a time in the future".into());
-                }
-                if at - lead_ms <= now {
-                    at = next_occurrence(at, input.repeat, lead_ms, now).unwrap_or(at);
-                }
-                let snoozed = alert_now(at);
+                let window = if input.repeat == Repeat::Interval { Some(input_window(&input)?) } else { None };
+                let (at, lead, snoozed) = match window {
+                    // An interval reminder starts at its next slot; it has no lead time.
+                    Some(w) => (w.next_slot(now).ok_or("This window has no time left in the next two weeks")?, 0, None),
+                    None => {
+                        let mut at = input.at;
+                        if input.repeat == Repeat::None && at <= now {
+                            return Err("Pick a time in the future".into());
+                        }
+                        if at - lead_ms <= now {
+                            at = next_occurrence(at, input.repeat, lead_ms, now).unwrap_or(at);
+                        }
+                        (at, lead, alert_now(at))
+                    }
+                };
+                let (every, from, until, days) = match window {
+                    Some(w) => (Some(w.every), Some(w.from), Some(w.until), Some(if w.weekdays_only { "weekdays" } else { "daily" })),
+                    None => (None, None, None, None),
+                };
                 match id {
                     Some(id) => conn.execute(
                         "UPDATE reminders SET title = ?1, kind = ?2, at = ?3, repeat = ?4, lead_min = ?5,
-                           snoozed_until = ?6, fired = 0
+                           snoozed_until = ?6, fired = 0,
+                           every_min = ?8, window_from = ?9, window_until = ?10, window_days = ?11
                          WHERE id = ?7",
-                        params![title, input.kind.as_str(), at, input.repeat.as_str(), lead, snoozed, id],
+                        params![title, input.kind.as_str(), at, input.repeat.as_str(), lead, snoozed, id, every, from, until, days],
                     ),
                     None => conn.execute(
-                        "INSERT INTO reminders (title, kind, at, repeat, lead_min, snoozed_until, created_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        params![title, input.kind.as_str(), at, input.repeat.as_str(), lead, snoozed, now],
+                        "INSERT INTO reminders (title, kind, at, repeat, lead_min, snoozed_until, created_at,
+                           every_min, window_from, window_until, window_days)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                        params![title, input.kind.as_str(), at, input.repeat.as_str(), lead, snoozed, now, every, from, until, days],
                     ),
                 }
             }

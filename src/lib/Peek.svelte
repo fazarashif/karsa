@@ -2,7 +2,11 @@
   import { clock } from './clock.svelte';
   import { focus, formatCountdown } from './focus.svelte';
   import { dueLabelShort, formatDate, formatTime, isUrgent } from './format.svelte';
+  import Eyes from './Eyes.svelte';
   import Icon from './Icon.svelte';
+  import { pasaran } from './jawa';
+  import { media } from './media.svelte';
+  import { mood } from './mood.svelte';
   import { nextToday, reminders } from './reminders.svelte';
   import { todo, upcomingTasks } from './todo.svelte';
   import { panel } from './ui.svelte';
@@ -11,6 +15,7 @@
 
   const next = $derived(nextToday(reminders.all, clock.now));
   // A task whose deadline is the next-up item already has its own row.
+  const playing = $derived(media.state);
   const top = $derived(upcomingTasks(todo.tasks).filter((t) => t.id !== next?.taskId).slice(0, 3));
   const timer = $derived(focus.state);
 
@@ -23,13 +28,14 @@
 
 <div
   class="peek"
+  class:with-media={playing.active}
   role="button"
   tabindex="0"
   {onclick}
   onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && onclick()}
 >
   <span class="head beat" style="--i: 0">
-    <span class="date">{formatDate(clock.now)}</span>
+    <span class="date"><Eyes expression={mood(clock.now)} width={24} glance />{formatDate(clock.now)}<span class="pasaran">{pasaran(clock.now)}</span></span>
     <span class="muted num">{formatTime(clock.now)}</span>
   </span>
   <span class="sep beat" style="--i: 1"><Icon name="ornaments/kawung-mark" size={8} /></span>
@@ -68,7 +74,25 @@
     {/if}
   </span>
 
-  <span class="row beat" style="--i: 4">
+  {#if playing.active}
+    <span class="row beat media" style="--i: 4">
+      <span class="key">Playing</span>
+      <span class="value ell" title="{playing.title}{playing.artist ? ` · ${playing.artist}` : ''} ({playing.app})">
+        {playing.title}{#if playing.artist}<span class="muted"> · {playing.artist}</span>{/if}
+      </span>
+      <button class="ibtn sm" aria-label="Previous" disabled={!playing.canPrevious} onclick={(e) => act(e, () => media.control('previous'))}>
+        <Icon name="previous" size={12} />
+      </button>
+      <button class="ibtn sm" aria-label={playing.playing ? 'Pause' : 'Play'} onclick={(e) => act(e, () => media.control('toggle'))}>
+        <Icon name={playing.playing ? 'pause' : 'play'} size={12} />
+      </button>
+      <button class="ibtn sm" aria-label="Next" disabled={!playing.canNext} onclick={(e) => act(e, () => media.control('next'))}>
+        <Icon name="skip" size={12} />
+      </button>
+    </span>
+  {/if}
+
+  <span class="row beat" style="--i: {playing.active ? 5 : 4}">
     <span class="key">Tasks</span>
     <span class="lines">
       {#each top as task (task.id)}
@@ -99,6 +123,11 @@
     overflow: hidden;
   }
 
+  /* One row taller while something is playing (PEEK_MEDIA_ROW in config.ts). */
+  .peek.with-media {
+    height: calc(var(--peek-h) + 26px);
+  }
+
   .head {
     display: flex;
     justify-content: space-between;
@@ -107,7 +136,18 @@
   }
 
   .date {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font: var(--fw-semibold) 14px/18px var(--font-text);
+  }
+
+  .pasaran {
+    margin-left: -2px;
+    font: var(--fw-semibold) var(--fs-caption) / 18px var(--font-text);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--muted);
   }
 
   .sep {

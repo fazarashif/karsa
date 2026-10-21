@@ -33,6 +33,13 @@ button {
   cursor: default;
 }
 
+/* A <select> opens its list in a separate popup, which stays white unless each option
+   brings its own colours; the inherited light text was then unreadable. */
+select option {
+  background-color: var(--popover-bg);
+  color: var(--fg);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;

@@ -1,10 +1,17 @@
 <script lang="ts">
   import { clock } from './clock.svelte';
   import FocusTab from './focus/FocusTab.svelte';
-  import { formatDate, formatTime, greeting } from './format.svelte';
+  import Eyes from './Eyes.svelte';
+  import { formatDate, formatTime } from './format.svelte';
   import Icon from './Icon.svelte';
+  import { greeting, pasaran } from './jawa';
+  import { mood } from './mood.svelte';
+  import { settings } from './settings.svelte';
   import { tabIn, tabOut } from './motion';
   import NotesTab from './notes/NotesTab.svelte';
+  import Capture from './capture/Capture.svelte';
+  import Rampung from './rampung/Rampung.svelte';
+  import ShelfTab from './shelf/ShelfTab.svelte';
   import RemindersTab from './reminders/RemindersTab.svelte';
   import SettingsTab from './settings/SettingsTab.svelte';
   import TodoTab from './todo/TodoTab.svelte';
@@ -15,6 +22,7 @@
     { id: 'focus', label: 'Focus' },
     { id: 'notes', label: 'Notes' },
     { id: 'reminders', label: 'Reminders' },
+    { id: 'shelf', label: 'Shelf', icon: 'shelf' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -31,13 +39,25 @@
   <span class="wm"><Icon name="ornaments/aksara-karsa" width={147} height={60} /></span>
 
   <header class="beat" style="--i: 0">
-    <span class="greet"><Icon name="ornaments/kawung-mark" size={8} />{greeting(clock.now)}</span>
+    <span class="greet">
+      <Icon name="ornaments/kawung-mark" size={8} /><span class="ell grow">{greeting(clock.now, settings.current)}</span>
+      <Eyes expression={mood(clock.now)} width={24} glance />
+    </span>
     <span class="date-row">
-      <span class="date">{formatDate(clock.now)}</span>
+      <span class="date">{formatDate(clock.now)}<span class="pasaran">{pasaran(clock.now)}</span></span>
       <span class="muted num">{formatTime(clock.now)}</span>
     </span>
   </header>
 
+  {#if panel.capture}
+    <div class="body ritual" in:tabIn>
+      <div class="pane"><Capture /></div>
+    </div>
+  {:else if panel.rampung}
+    <div class="body ritual" in:tabIn>
+      <div class="pane"><Rampung /></div>
+    </div>
+  {:else}
   <div class="tabs beat" style="--i: 1" role="tablist">
     {#each tabs as t, i (t.id)}
       <button
@@ -72,12 +92,15 @@
           <RemindersTab />
         {:else if panel.tab === 'settings'}
           <SettingsTab />
+        {:else if panel.tab === 'shelf'}
+          <ShelfTab />
         {:else}
           <NotesTab />
         {/if}
       </div>
     {/key}
   </div>
+  {/if}
 </div>
 
 <style>
@@ -127,6 +150,15 @@
     font: var(--fw-semibold) var(--fs-title-lg) / var(--lh-title-lg) var(--font-text);
   }
 
+  /* Today's Javanese market day, after the date. */
+  .pasaran {
+    margin-left: 8px;
+    font: var(--fw-semibold) var(--fs-caption) / var(--lh-caption) var(--font-text);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
   .tabs {
     position: relative;
     display: flex;
@@ -152,12 +184,16 @@
     outline-offset: -2px;
   }
 
-  /* Settings: an icon at the far end of the tab row. */
+  /* Shelf and Settings: icons at the far end of the tab row, close together. */
   .tab.icon-tab {
     margin-left: auto;
     width: 28px;
     display: grid;
     place-items: center;
+  }
+
+  .tab.icon-tab + .tab.icon-tab {
+    margin-left: -16px;
   }
 
   /* One 1 px bar scaled to the active tab's width, so moving it only animates transform. */
@@ -184,6 +220,11 @@
     min-height: 0;
     display: grid;
     padding-top: 12px;
+  }
+
+  /* The ritual takes the tabs' place, separated from the header by the same hairline. */
+  .body.ritual {
+    border-top: 1px solid var(--hairline);
   }
 
   .pane {

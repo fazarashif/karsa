@@ -24,11 +24,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
 
     let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+    let rampung = MenuItem::with_id(app, "rampung", "Wrap up the day", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
     let autostart =
         CheckMenuItem::with_id(app, "autostart", "Start with Windows", true, autostart_enabled, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &settings_item, &PredefinedMenuItem::separator(app)?, &autostart])?;
+    let menu = Menu::with_items(app, &[&open, &rampung, &settings_item, &PredefinedMenuItem::separator(app)?, &autostart])?;
     // Development builds can show an alert on demand, to check the alert layout.
     #[cfg(debug_assertions)]
     menu.append(&MenuItem::with_id(app, "test-alert", "Show test alert", true, None::<&str>)?)?;
@@ -50,6 +51,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             }
             "settings" => {
                 let _ = app.emit_to(ISLAND, "island://open", "settings");
+            }
+            "rampung" => {
+                let _ = app.emit_to(ISLAND, "island://open", "rampung");
             }
             "test-alert" => {
                 let alert = serde_json::json!({ "title": "Weekly sync", "subtitle": "Meeting · starts in 5 min", "kind": "meeting" });

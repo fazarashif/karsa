@@ -1,17 +1,21 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { BOX, PILL, TIMING, type Box, type Mode } from './lib/config';
+  import { BOX, NOTCH, PEEK_MEDIA_ROW, PILL, TIMING, type Box, type Mode } from './lib/config';
   import { core, emitLocal, inTauri, on, type AlertPayload } from './lib/bridge';
   import { clock } from './lib/clock.svelte';
   import { handleEscape } from './lib/escape';
   import { focus, formatCountdown } from './lib/focus.svelte';
-  import { formatTime, prefs } from './lib/format.svelte';
+  import { formatTime, prefs, toDateInput } from './lib/format.svelte';
   import { contentOut } from './lib/motion';
+  import { media, previewMedia } from './lib/media.svelte';
+  import { idleMood } from './lib/mood.svelte';
+  import { pointer } from './lib/pointer.svelte';
   import { nextToday, reminders } from './lib/reminders.svelte';
   import { settings } from './lib/settings.svelte';
-  import { todayStatus, todo } from './lib/todo.svelte';
+  import { todo } from './lib/todo.svelte';
   import { panel } from './lib/ui.svelte';
   import Alert from './lib/Alert.svelte';
+  import Drop from './lib/Drop.svelte';
   import Panel from './lib/Panel.svelte';
   import Peek from './lib/Peek.svelte';
   import Pill, { type PillContent } from './lib/Pill.svelte';
@@ -23,9 +27,12 @@
   let islandEl = $state<HTMLDivElement>();
   /** Bumped on hover so the eyes blink once (kedhep). */
   let blinkKey = $state(0);
+  /** Settings → Position: a notch at the top centre instead of the bottom-right pill. */
+  const notch = $derived(settings.current.islandPosition === 'top');
 
   // Priority (requirements 4.2): alert waiting, a reminder within 15 minutes, the focus
   // timer, the next reminder today, then the eyes. Never the clock: the taskbar has it.
+  // The notch sits over title bars all day, so it leaves later reminders to Peek.
   const pillContent: PillContent = $derived.by(() => {
     if (alert) return { kind: 'alert', alert };
     const now = clock.now;
@@ -46,11 +53,13 @@
         waiting: timer.status === 'waiting',
       };
     }
-    if (next) return { kind: 'due', title: next.title, detail: formatTime(next.at), color };
-    const today = todayStatus(todo.tasks, now);
-    const hour = now.getHours();
-    const expression = today.total > 0 && today.open === 0 ? 'mesem' : hour >= 22 || hour < 5 ? 'merem' : 'melek';
-    return { kind: 'eyes', expression };
+    if (next && !notch) return { kind: 'due', title: next.title, detail: formatTime(next.at), color };
+    // What is playing, only while it plays: a track paused all afternoon is not news.
+    const playing = media.state;
+    if (settings.current.mediaInPill && playing.active && playing.playing) {
+      return { kind: 'media', title: playing.title, artist: playing.artist, art: playing.art };
+    }
+    return { kind: 'eyes', expression: idleMood(now) };
   });
 
   let pointerInside = false;
@@ -65,7 +74,11 @@
   let region = { width: 0, height: 0 };
 
   const box: Box = $derived(
-    mode === 'idle' ? { width: pillWidth, height: PILL.height, radius: PILL.radius } : BOX[mode],
+    mode === 'idle'
+      ? { width: pillWidth, ...(notch ? NOTCH : PILL) }
+      : mode === 'peek' && media.state.active
+        ? { ...BOX.peek, height: BOX.peek.height + PEEK_MEDIA_ROW }
+        : BOX[mode],
   );
 
   function applyRegion(width: number, height: number) {
@@ -83,10 +96,13 @@
   });
 
   /** A countdown's rounded width can flip by 1 px between seconds ("20:37" is a hair
-      narrower than "20:38"). Following that would run the 700 ms width spring every few
-      seconds, so the pill grows at once but only shrinks for real changes. */
+      narrower than "20:38"), or 2 px in the notch. Following that would run the 700 ms
+      width spring every few seconds, so the pill grows at once but only shrinks for real
+      changes. */
   function setPillWidth(width: number) {
-    if (width > pillWidth || pillWidth - width > 1) pillWidth = width;
+    // The notch is centred: an even width keeps its edges on whole pixels.
+    if (notch) width = Math.ceil(width / 2) * 2;
+    if (width > pillWidth || pillWidth - width > 2) pillWidth = width;
   }
 
   function setMode(next: Mode) {
@@ -100,7 +116,7 @@
     if (inside) {
       if (mode === 'idle') {
         blinkKey++;
-        hoverTimer = setTimeout(() => (mode = alert ? 'alert' : 'peek'), TIMING.hoverOpen);
+        hoverTimer = setTimeout(() => (mode = alert ? 'alert' : 'peek'), notch ? TIMING.hoverOpenNotch : TIMING.hoverOpen);
       }
     } else if (mode === 'peek' || (mode === 'alert' && alertHeld)) {
       hoverTimer = setTimeout(() => (mode = 'idle'), TIMING.hoverClose);
@@ -115,6 +131,8 @@
 
   function collapse(restoreFocus: boolean) {
     if (mode !== 'expanded') return;
+    panel.rampung = false;
+    panel.capture = false;
     setMode('idle');
     core.setInteractive(false, restoreFocus);
   }
@@ -186,6 +204,69 @@
   function onFocusAction(action: 'start' | 'skip' | 'stop') {
     dismissAlert();
     focus[action]();
+  }
+
+  // Rampung is offered once a day on weekdays at the time set in Settings, never while a
+  // focus phase runs. "Later" offers it again 30 minutes on. Checked on the minute clock,
+  // so it costs no timer of its own.
+  let rampungOffered = '';
+  let rampungLaterUntil = 0;
+  $effect(() => {
+    const now = clock.now;
+    const s = settings.current;
+    const status = focus.state.status;
+    untrack(() => {
+      const today = toDateInput(now.getTime());
+      if (!s.rampungEnabled || s.rampungDoneDate === today || rampungOffered === today || panel.rampung) return;
+      if (now.getDay() === 0 || now.getDay() === 6 || status === 'running' || status === 'paused') return;
+      const [h, m] = s.rampungTime.split(':').map(Number);
+      if (now.getHours() * 60 + now.getMinutes() < h * 60 + m || Date.now() < rampungLaterUntil) return;
+      rampungOffered = today;
+      showAlert({ title: 'Time to wrap up', subtitle: 'Rampung · a quick look back at today', kind: 'general', rampung: true });
+    });
+  });
+
+  // Files dragged onto the island go on the shelf (the core keeps them on drop). Over the
+  // pill, the island grows into a drop target; over the open panel, it shows the shelf.
+  let dropCount = $state(0);
+  let dropKept = $state<number | null>(null);
+  let dropTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function onShelfDrag(note: { kind: 'enter' | 'leave' | 'drop'; count: number; kept: number }) {
+    if (note.kind === 'enter') {
+      if (mode === 'expanded') {
+        panel.tab = 'shelf';
+        panel.shelf = 'files';
+        return;
+      }
+      clearTimeout(dropTimer);
+      dropCount = note.count;
+      dropKept = null;
+      setMode('drop');
+    } else if (note.kind === 'leave') {
+      if (mode === 'drop' && dropKept === null) setMode('idle');
+    } else {
+      if (mode === 'expanded') return;
+      dropKept = note.kept;
+      setMode('drop');
+      dropTimer = setTimeout(() => mode === 'drop' && setMode('idle'), 1800);
+    }
+  }
+
+  function startRampung() {
+    rampungOffered = toDateInput(Date.now());
+    panel.rampung = true;
+    void expand();
+  }
+
+  function onRampung(action: 'start' | 'later') {
+    dismissAlert();
+    if (action === 'start') {
+      startRampung();
+    } else {
+      rampungOffered = '';
+      rampungLaterUntil = Date.now() + 30 * 60_000;
+    }
   }
 
   // A phase-end alert is moot once the waiting phase was started (or stopped) elsewhere,
@@ -262,6 +343,13 @@
         alert: (overrides: Partial<AlertPayload> = {}) =>
           emitLocal('island://alert', { ...demoAlert, ...overrides }),
         fullscreen: (active: boolean) => emitLocal('island://fullscreen', active),
+        rampung: () => emitLocal('island://open', 'rampung'),
+        capture: () => emitLocal('island://capture', null),
+        media: previewMedia,
+        drop: (count = 2) => {
+          emitLocal('shelf://drag', { kind: 'enter', count, kept: 0 });
+          setTimeout(() => emitLocal('shelf://drag', { kind: 'drop', count, kept: count }), 1500);
+        },
         state: () => ({ mode, alert: $state.snapshot(alert), pillWidth }),
       },
     });
@@ -273,19 +361,28 @@
   onMount(() => {
     const offs = [
       on('island://blur', () => collapse(false)),
-      on('island://open', (tab) => {
-        if (tab) panel.tab = tab;
+      on('island://open', (target) => {
+        if (target === 'rampung') return startRampung();
+        if (target) panel.tab = target;
         void expand();
       }),
       on('island://alert', showAlert),
+      on('island://capture', () => {
+        panel.rampung = false;
+        panel.capture = true;
+        void expand();
+      }),
       on('island://fullscreen', onFullscreen),
     ];
+    offs.push(on('shelf://drag', onShelfDrag));
     core.uses12HourClock().then((v) => (prefs.hour12 = v));
     panel.collapse = () => collapse(false);
+    panel.closeAndReturn = () => collapse(true);
     todo.load();
     focus.load();
     reminders.load();
     settings.load();
+    media.load();
     if (!inTauri) installPreviewHelpers();
     // Wait for the first painted frame before the core shows the window.
     requestAnimationFrame(() => requestAnimationFrame(() => core.ready()));
@@ -300,19 +397,24 @@
        webview activate the window and pull focus from the user's app. -->
   <div
     class="island"
+    class:notch
     bind:this={islandEl}
     style:width="{box.width}px"
     style:height="{box.height}px"
-    style:border-radius="{box.radius}px"
+    style:border-radius={notch ? `0 0 ${box.radius}px ${box.radius}px` : `${box.radius}px`}
     onmouseenter={() => onPointer(true)}
-    onmouseleave={() => onPointer(false)}
+    onmouseleave={() => {
+      onPointer(false);
+      pointer.leave();
+    }}
+    onmousemove={(e) => pointer.move(e.clientX, e.clientY)}
     onmousedown={(e) => mode !== 'expanded' && e.preventDefault()}
     role="presentation"
   >
     {#key mode}
       <div class="layer" out:contentOut>
         {#if mode === 'idle'}
-          <Pill content={pillContent} {blinkKey} onwidth={setPillWidth} onclick={onPillClick} />
+          <Pill content={pillContent} {notch} {blinkKey} onwidth={setPillWidth} onclick={onPillClick} />
         {:else if mode === 'peek'}
           <Peek onclick={() => void expand()} />
         {:else if mode === 'alert' && alert}
@@ -323,9 +425,12 @@
             onfocus={onFocusAction}
             onreview={reviewAlert}
             onmeeting={meetingNoteAlert}
+            onrampung={onRampung}
           />
         {:else if mode === 'expanded'}
           <Panel />
+        {:else if mode === 'drop'}
+          <Drop count={dropCount} kept={dropKept} />
         {/if}
       </div>
     {/key}
@@ -365,5 +470,24 @@
     bottom: 0;
     width: max-content;
     transform-origin: bottom right;
+  }
+
+  /* The notch hangs from the middle of the top edge and grows downwards and outwards.
+     Its widths are even, so its edges stay on whole pixels. */
+  .island.notch,
+  .notch .layer {
+    top: 0;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    translate: -50% 0;
+  }
+
+  .island.notch {
+    box-shadow: var(--edge-notch);
+  }
+
+  .notch .layer {
+    transform-origin: top center;
   }
 </style>

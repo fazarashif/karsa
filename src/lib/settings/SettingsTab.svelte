@@ -1,13 +1,26 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { focus } from '../focus.svelte';
+  import { formatTime, fromInputs, toDateInput } from '../format.svelte';
   import Icon from '../Icon.svelte';
+  import { parseDate, weton } from '../jawa';
+  import PickerField from '../PickerField.svelte';
   import { settings } from '../settings.svelte';
   import Stepper from './Stepper.svelte';
   import Switch from './Switch.svelte';
 
   const s = $derived(settings.current);
   const timer = $derived(focus.state.settings);
+  const born = $derived(parseDate(s.birthday));
+  const presets = ['Win+Shift+K', 'Ctrl+Alt+K', 'Alt+Shift+K', 'Ctrl+Shift+Space', 'Ctrl+Alt+Space', ''];
+  // A shortcut set some other way still shows.
+  const hotkeys = $derived(presets.includes(s.captureHotkey) ? presets : [s.captureHotkey, ...presets]);
+  const birthdayFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const positions = [
+    { label: 'Bottom right', value: 'corner' },
+    { label: 'Top', value: 'top' },
+  ] as const;
 
   const leads = [
     { label: 'At time', minutes: 0 },
@@ -24,7 +37,60 @@
 <div class="view">
   <div class="scroll">
     <section>
+      <h3 class="caps">You</h3>
+      <div class="block">
+        <label class="field wide">
+          <span class="label">Name</span>
+          <span class="input">
+            <input
+              value={s.name}
+              maxlength="40"
+              placeholder="For the greeting"
+              aria-label="Name"
+              onchange={(e) => settings.update({ name: e.currentTarget.value })}
+              onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            />
+          </span>
+        </label>
+        <div class="field wide">
+          <span class="label">Birthday</span>
+          <PickerField
+            type="date"
+            value={s.birthday}
+            display={born ? birthdayFormat.format(born) : ''}
+            placeholder="Optional"
+            label="Birthday"
+            onchange={(value) => settings.update({ birthday: value })}
+            onclear={() => settings.update({ birthday: '' })}
+          />
+        </div>
+        <span class="hint">
+          {#if born}Your weton is {weton(born)}. Karsa greets you on your birthday and every 35 days, on your weton.
+          {:else}Karsa uses it to greet you on your birthday and on your weton day.{/if}
+        </span>
+      </div>
+    </section>
+
+    <section>
       <h3 class="caps">General</h3>
+      <div class="block ruled">
+        <span class="label">Position</span>
+        <div class="chips" role="radiogroup" aria-label="Position">
+          {#each positions as position (position.value)}
+            <button
+              class="chip"
+              class:on={s.islandPosition === position.value}
+              role="radio"
+              aria-checked={s.islandPosition === position.value}
+              onclick={() => settings.update({ islandPosition: position.value })}>{position.label}</button
+            >
+          {/each}
+        </div>
+        <span class="hint">
+          {#if s.islandPosition === 'top'}A slim notch at the top of the screen that opens downwards.
+          {:else}Above the taskbar, next to the clock.{/if}
+        </span>
+      </div>
       <div class="row">
         <span class="label grow">Start with Windows</span>
         <Switch checked={s.autostart} label="Start with Windows" onchange={(v) => settings.update({ autostart: v })} />
@@ -38,6 +104,17 @@
           checked={s.hideInFullscreen}
           label="Hide during fullscreen"
           onchange={(v) => settings.update({ hideInFullscreen: v })}
+        />
+      </div>
+      <div class="row">
+        <span class="grow">
+          <span class="label">Show what's playing in the pill</span>
+          <span class="hint">Music or video from Spotify, a browser and the like, when nothing else is due. Peek always has the controls.</span>
+        </span>
+        <Switch
+          checked={s.mediaInPill}
+          label="Show what's playing in the pill"
+          onchange={(v) => settings.update({ mediaInPill: v })}
         />
       </div>
     </section>
@@ -95,6 +172,76 @@
         </div>
         <span class="hint">The starting point for new reminders and for todo deadlines with a time.</span>
       </div>
+    </section>
+
+    <section>
+      <h3 class="caps">Quick capture</h3>
+      <div class="row">
+        <span class="grow">
+          <span class="label">Shortcut</span>
+          <span class="hint">From any app: type a task or a note, press Enter, and you're back where you were.</span>
+        </span>
+        <span class="input sm hotkey">
+          <select
+            value={s.captureHotkey}
+            aria-label="Quick capture shortcut"
+            onchange={(e) => settings.update({ captureHotkey: e.currentTarget.value })}
+          >
+            {#each hotkeys as key (key)}
+              <option value={key}>{key || 'Off'}</option>
+            {/each}
+          </select>
+          <Icon name="chevron-down" size={12} />
+        </span>
+      </div>
+      {#if s.captureHotkey && !s.captureHotkeyOk}
+        <p class="error meta">Another app already uses {s.captureHotkey}. Pick another shortcut.</p>
+      {/if}
+    </section>
+
+    <section>
+      <h3 class="caps">Shelf</h3>
+      <div class="row">
+        <span class="grow">
+          <span class="label">Clipboard history</span>
+          <span class="hint">Keeps text you copy for 24 hours, encrypted with your Windows account. Turning it off deletes it.</span>
+        </span>
+        <Switch
+          checked={s.clipboardEnabled}
+          label="Clipboard history"
+          onchange={(v) => settings.update({ clipboardEnabled: v })}
+        />
+      </div>
+    </section>
+
+    <section>
+      <h3 class="caps">End of the day</h3>
+      <div class="row">
+        <span class="grow">
+          <span class="label">Offer to wrap up the day</span>
+          <span class="hint">Rampung: a short look back at today and ahead to tomorrow, on weekdays.</span>
+        </span>
+        <Switch
+          checked={s.rampungEnabled}
+          label="Offer to wrap up the day"
+          onchange={(v) => settings.update({ rampungEnabled: v })}
+        />
+      </div>
+      {#if s.rampungEnabled}
+        <div class="row">
+          <span class="label grow">At</span>
+          <span class="time">
+            <PickerField
+              type="time"
+              value={s.rampungTime}
+              display={formatTime(fromInputs(toDateInput(Date.now()), s.rampungTime))}
+              placeholder="17:00"
+              label="Wrap-up time"
+              onchange={(value) => value && settings.update({ rampungTime: value })}
+            />
+          </span>
+        </div>
+      {/if}
     </section>
 
     <section>
@@ -156,6 +303,24 @@
     align-items: flex-start;
     gap: 8px;
     padding: 6px 4px;
+  }
+
+  .block.ruled {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .field.wide {
+    align-self: stretch;
+  }
+
+  .time {
+    width: 120px;
+  }
+
+  .hotkey {
+    flex: none;
+    width: 150px;
   }
 
   .hint {

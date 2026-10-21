@@ -29,6 +29,8 @@
   --popover-bg: #141414;
   --checkbox-border: #EBEBF580;
   --edge: inset 0 0 0 1px #FFFFFF12;
+  /* The notch hangs from the top of the screen, so its edge leaves out the top side. */
+  --edge-notch: inset 1px 0 0 #FFFFFF12, inset -1px 0 0 #FFFFFF12, inset 0 -1px 0 #FFFFFF12;
   --focus-ring: #EFE6D2B3;
 
   /* Semantic accents */
@@ -94,6 +96,9 @@
   /* Sizes */
   --window-w: 400px;  --window-h: 540px;
   --pill-h: 32px;     --pill-min-w: 72px;  --pill-max-w: 220px;
+  /* The pill as a notch at the top of the screen: slimmer, so it hides less of the title bars below. */
+  --notch-h: 26px;    --notch-min-w: 80px; --notch-max-w: 200px;
+  --radius-notch: 12px;
   --peek-w: 320px;    --peek-h: 172px;
   --panel-w: 380px;   --panel-h: 520px;
   --alert-w: 320px;   --alert-h: 112px;
