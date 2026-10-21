@@ -24,21 +24,9 @@ use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 pub const ISLAND: &str = "island";
 
 #[tauri::command]
-fn ui_ready(app: AppHandle, engine: tauri::State<'_, Arc<reminders::ReminderEngine>>) {
+fn ui_ready(engine: tauri::State<'_, Arc<reminders::ReminderEngine>>) {
     island::ui_ready();
     engine.start();
-    accept_file_drops(&app);
-}
-
-/// Puts the shelf's drop target on the island's windows now and once more shortly after,
-/// since WebView2 may set up its own (which refuses outside drops) once the island shows.
-fn accept_file_drops(app: &AppHandle) {
-    shelf::register_drop_target(app);
-    let app = app.clone();
-    let _ = std::thread::Builder::new().name("karsa-drop".into()).spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(1500));
-        shelf::register_drop_target(&app);
-    });
 }
 
 #[tauri::command]
@@ -70,9 +58,6 @@ fn forward_hook_events(app: AppHandle, events: Receiver<HookEvent>) {
                     fullscreen = active;
                     island::set_hidden(active);
                     let _ = app.emit_to(ISLAND, "island://fullscreen", active);
-                    if !active {
-                        accept_file_drops(&app);
-                    }
                 }
             }
             HookEvent::ClockChanged => {
@@ -162,7 +147,6 @@ fn main() {
             shelf::shelf_add,
             shelf::shelf_paste,
             shelf::shelf_pick,
-            shelf::shelf_drop_status,
             shelf::shelf_remove,
             shelf::shelf_clear,
             shelf::shelf_open,
@@ -204,6 +188,7 @@ fn main() {
                 .get_webview_window(ISLAND)
                 .expect("the island window is defined in tauri.conf.json");
             island::init(&window)?;
+            shelf::accept_drops(app.handle(), &window)?;
 
             let (sender, receiver) = mpsc::channel();
             hooks::start(sender)?;

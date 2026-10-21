@@ -128,7 +128,7 @@ pub async fn shelf_pick(app: AppHandle) -> Result<usize, String> {
     add_paths(&app, &paths)
 }
 
-/// The paths in an HDROP (from the clipboard or a drop).
+/// The paths in an HDROP from the clipboard.
 unsafe fn hdrop_paths(hdrop: windows_sys::Win32::UI::Shell::HDROP) -> Vec<String> {
     use windows_sys::Win32::UI::Shell::DragQueryFileW;
     let count = DragQueryFileW(hdrop, u32::MAX, std::ptr::null_mut(), 0);
@@ -177,7 +177,7 @@ fn pick_files(owner: isize) -> Vec<String> {
     }
 }
 
-/// What the island tells the UI while files are dragged over it.
+/// What the island tells the UI once dropped files are on the shelf.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct DragNote {
@@ -186,161 +186,51 @@ struct DragNote {
     kept: usize,
 }
 
-/// Karsa's own drop target for files dragged from Explorer (or anywhere). WebView2 can put
-/// its own target, which refuses outside drops, on the island's windows after the webview
-/// has started, so this one is (re)registered whenever the island is shown.
-#[windows::core::implement(windows::Win32::System::Ole::IDropTarget)]
-struct ShelfDropTarget {
-    app: AppHandle,
-    files: std::cell::Cell<usize>,
-}
+/// What the page posts, with the dropped files attached, when files are dropped on the
+/// island (`dropFiles` in src/lib/shelf.svelte.ts).
+const DROP_MESSAGE: &str = "karsa:shelf-drop";
 
-impl ShelfDropTarget {
-    unsafe fn paths(data: windows::core::Ref<'_, windows::Win32::System::Com::IDataObject>) -> Vec<String> {
-        use windows::Win32::System::Com::{DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
-        use windows::Win32::System::Ole::{ReleaseStgMedium, CF_HDROP};
-        let Some(data) = data.as_ref() else { return Vec::new() };
-        let format = FORMATETC {
-            cfFormat: CF_HDROP.0,
-            ptd: std::ptr::null_mut(),
-            dwAspect: DVASPECT_CONTENT.0,
-            lindex: -1,
-            tymed: TYMED_HGLOBAL.0 as u32,
+/// Files dropped on the island come in through WebView2, which accepts drops from
+/// Explorer the way Edge does: the page posts the dropped `File`s with
+/// `chrome.webview.postMessageWithAdditionalObjects`, and WebView2 gives this side their
+/// paths. An OLE drop target on Karsa's own windows is never reached by a real drag:
+/// the window under the cursor belongs to the WebView2 process, and Windows does not go
+/// up from it to its parent in Karsa's process.
+pub fn accept_drops(app: &AppHandle, window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let app = app.clone();
+    window.with_webview(move |webview| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2File, ICoreWebView2WebMessageReceivedEventArgs2,
         };
-        let Ok(mut medium) = data.GetData(&format) else { return Vec::new() };
-        let paths = hdrop_paths(medium.u.hGlobal.0 as _);
-        ReleaseStgMedium(&mut medium);
-        paths
-    }
+        use webview2_com::{take_pwstr, WebMessageReceivedEventHandler};
+        use windows::core::{Interface, PWSTR};
 
-    fn note(&self, kind: &'static str, kept: usize) {
-        let _ = self.app.emit("shelf://drag", DragNote { kind, count: self.files.get(), kept });
-    }
-}
-
-#[allow(non_snake_case)]
-impl windows::Win32::System::Ole::IDropTarget_Impl for ShelfDropTarget_Impl {
-    fn DragEnter(
-        &self,
-        data: windows::core::Ref<'_, windows::Win32::System::Com::IDataObject>,
-        _keys: windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS,
-        _point: &windows::Win32::Foundation::POINTL,
-        effect: *mut windows::Win32::System::Ole::DROPEFFECT,
-    ) -> windows::core::Result<()> {
-        use windows::Win32::System::Ole::{DROPEFFECT_COPY, DROPEFFECT_NONE};
-        let count = unsafe { ShelfDropTarget::paths(data) }.len();
-        self.files.set(count);
-        unsafe { *effect = if count > 0 { DROPEFFECT_COPY } else { DROPEFFECT_NONE } };
-        if count > 0 {
-            self.note("enter", 0);
-        }
-        Ok(())
-    }
-
-    fn DragOver(
-        &self,
-        _keys: windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS,
-        _point: &windows::Win32::Foundation::POINTL,
-        effect: *mut windows::Win32::System::Ole::DROPEFFECT,
-    ) -> windows::core::Result<()> {
-        use windows::Win32::System::Ole::{DROPEFFECT_COPY, DROPEFFECT_NONE};
-        unsafe { *effect = if self.files.get() > 0 { DROPEFFECT_COPY } else { DROPEFFECT_NONE } };
-        Ok(())
-    }
-
-    fn DragLeave(&self) -> windows::core::Result<()> {
-        if self.files.get() > 0 {
-            self.note("leave", 0);
-        }
-        Ok(())
-    }
-
-    fn Drop(
-        &self,
-        data: windows::core::Ref<'_, windows::Win32::System::Com::IDataObject>,
-        _keys: windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS,
-        _point: &windows::Win32::Foundation::POINTL,
-        effect: *mut windows::Win32::System::Ole::DROPEFFECT,
-    ) -> windows::core::Result<()> {
-        use windows::Win32::System::Ole::{DROPEFFECT_COPY, DROPEFFECT_NONE};
-        let paths = unsafe { ShelfDropTarget::paths(data) };
-        let kept = add_paths(&self.app, &paths).unwrap_or(0);
-        unsafe { *effect = if kept > 0 { DROPEFFECT_COPY } else { DROPEFFECT_NONE } };
-        self.note("drop", kept);
-        Ok(())
-    }
-}
-
-/// Registers the shelf's drop target on the island window and every child window Karsa
-/// owns (the WebView2 content windows belong to its browser process and pass drops up to
-/// their Karsa-owned parent). Runs on the UI thread, which has OLE initialised.
-pub fn register_drop_target(app: &AppHandle) {
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || unsafe {
-        use windows::core::Interface;
-        use windows::Win32::Foundation::{HWND, LPARAM};
-        use windows::Win32::System::Ole::{IDropTarget, RegisterDragDrop, RevokeDragDrop};
-        use windows::Win32::System::Threading::GetCurrentProcessId;
-        use windows::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetWindowThreadProcessId};
-
-        let island = HWND(island::handle() as _);
-        if island.0.is_null() {
-            return;
-        }
-        let mut windows = vec![island];
-        unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> windows::core::BOOL {
-            (*(list.0 as *mut Vec<HWND>)).push(hwnd);
-            true.into()
-        }
-        let _ = EnumChildWindows(Some(island), Some(collect), LPARAM(&mut windows as *mut Vec<HWND> as isize));
-        let target: IDropTarget = ShelfDropTarget { app: handle, files: 0.into() }.into();
-        OUR_TARGET.store(target.as_raw() as usize, std::sync::atomic::Ordering::Relaxed);
-        let me = GetCurrentProcessId();
-        for hwnd in windows {
-            let mut pid = 0;
-            GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            if pid == me {
-                let _ = RevokeDragDrop(hwnd);
-                let _ = RegisterDragDrop(hwnd, &target);
+        let Ok(core) = webview.controller().CoreWebView2() else { return };
+        let handler = WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            // Tauri's own IPC messages pass through here too.
+            let mut message = PWSTR::null();
+            if args.TryGetWebMessageAsString(&mut message).is_err() || take_pwstr(message) != DROP_MESSAGE {
+                return Ok(());
             }
-        }
-    });
-}
-
-/// The drop target last registered, to check it is still the one Windows uses.
-static OUR_TARGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-/// For each of Karsa's own island windows: its class and whether the shelf's drop target
-/// is the one registered there (OLE keeps it in the "OleDropTargetInterface" property).
-#[tauri::command]
-pub fn shelf_drop_status() -> Vec<(String, bool)> {
-    use windows_sys::Win32::Foundation::{HWND, LPARAM};
-    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetClassNameW, GetPropW, GetWindowThreadProcessId};
-    unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> i32 {
-        (*(list as *mut Vec<HWND>)).push(hwnd);
-        1
-    }
-    let island = island::handle() as HWND;
-    let mut windows = vec![island];
-    let ours = OUR_TARGET.load(std::sync::atomic::Ordering::Relaxed);
-    let prop: Vec<u16> = "OleDropTargetInterface\0".encode_utf16().collect();
-    unsafe {
-        EnumChildWindows(island, Some(collect), &mut windows as *mut Vec<HWND> as LPARAM);
-        windows
-            .into_iter()
-            .filter(|&hwnd| {
-                let mut pid = 0;
-                GetWindowThreadProcessId(hwnd, &mut pid);
-                pid == GetCurrentProcessId()
-            })
-            .map(|hwnd| {
-                let mut class = [0u16; 64];
-                let len = GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32).max(0) as usize;
-                (String::from_utf16_lossy(&class[..len]), ours != 0 && GetPropW(hwnd, prop.as_ptr()) as usize == ours)
-            })
-            .collect()
-    }
+            let files = args.cast::<ICoreWebView2WebMessageReceivedEventArgs2>()?.AdditionalObjects()?;
+            let mut count = 0;
+            files.Count(&mut count)?;
+            let mut paths = Vec::new();
+            for i in 0..count {
+                let Ok(file) = files.GetValueAtIndex(i)?.cast::<ICoreWebView2File>() else { continue };
+                let mut path = PWSTR::null();
+                if file.Path(&mut path).is_ok() {
+                    paths.push(take_pwstr(path));
+                }
+            }
+            let kept = add_paths(&app, &paths).unwrap_or(0);
+            let _ = app.emit("shelf://drag", DragNote { kind: "drop", count: paths.len(), kept });
+            Ok(())
+        }));
+        let mut token = 0;
+        let _ = core.add_WebMessageReceived(&handler, &mut token);
+    })
 }
 
 #[tauri::command]

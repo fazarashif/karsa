@@ -12,6 +12,7 @@
   import { pointer } from './lib/pointer.svelte';
   import { nextToday, reminders } from './lib/reminders.svelte';
   import { settings } from './lib/settings.svelte';
+  import { dropFiles } from './lib/shelf.svelte';
   import { todo } from './lib/todo.svelte';
   import { panel } from './lib/ui.svelte';
   import Alert from './lib/Alert.svelte';
@@ -228,6 +229,7 @@
 
   // Files dragged onto the island go on the shelf (the core keeps them on drop). Over the
   // pill, the island grows into a drop target; over the open panel, it shows the shelf.
+  // WebView2 runs the drag, as Edge does; the page decides what it accepts.
   let dropCount = $state(0);
   let dropKept = $state<number | null>(null);
   let dropTimer: ReturnType<typeof setTimeout> | undefined;
@@ -251,6 +253,60 @@
       setMode('drop');
       dropTimer = setTimeout(() => mode === 'drop' && setMode('idle'), 1800);
     }
+  }
+
+  let dragging = false;
+  /** Ends a drag that went quiet without a dragleave, so the drop target never sticks. */
+  let dragWatchdog: ReturnType<typeof setTimeout> | undefined;
+  const isFileDrag = (e: DragEvent) => e.dataTransfer?.types.includes('Files') ?? false;
+  const editable = (target: EventTarget | null) =>
+    target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea') !== null);
+
+  function onDragOver(e: DragEvent) {
+    if (isFileDrag(e)) {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'copy';
+      clearTimeout(dragWatchdog);
+      dragWatchdog = setTimeout(endDrag, 10_000);
+      if (!dragging) {
+        dragging = true;
+        const count = [...e.dataTransfer!.items].filter((item) => item.kind === 'file').length;
+        onShelfDrag({ kind: 'enter', count, kept: 0 });
+      }
+    } else if (!editable(e.target)) {
+      // Anything else (a link, text) dropped outside a text field would open in the webview.
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'none';
+    }
+  }
+
+  /** Moving from one element to another (the morph replaces the one under the pointer)
+      fires a dragleave whose relatedTarget is the element entered. Only one without it
+      means the files left the window, which the region keeps to the island. */
+  function onDragLeave(e: DragEvent) {
+    if (!e.relatedTarget) endDrag();
+  }
+
+  function endDrag() {
+    clearTimeout(dragWatchdog);
+    if (!dragging) return;
+    dragging = false;
+    onShelfDrag({ kind: 'leave', count: 0, kept: 0 });
+  }
+
+  function onDrop(e: DragEvent) {
+    if (!isFileDrag(e)) {
+      if (!editable(e.target)) e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    clearTimeout(dragWatchdog);
+    dragging = false;
+    const files = e.dataTransfer!.files;
+    // The core answers with a "drop" note once the files are on the shelf. Files that
+    // exist only inside another app (an Outlook attachment) have no path to keep.
+    if (!files.length) onShelfDrag({ kind: 'leave', count: 0, kept: 0 });
+    else if (!dropFiles(files)) onShelfDrag({ kind: 'drop', count: files.length, kept: files.length });
   }
 
   function startRampung() {
@@ -390,7 +446,7 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} ondragenter={onDragOver} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop} />
 
 <main class="stage" class:preview={!inTauri}>
   <!-- Outside the panel, clicks must not move focus into the page: that would let the

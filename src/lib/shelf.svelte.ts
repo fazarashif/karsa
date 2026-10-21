@@ -90,6 +90,17 @@ export const shelf = {
   drag: (ids: number[]) => run('shelf_drag', { ids }, false),
 };
 
+/** Hands files dropped on the island to the core. Only WebView2 can turn a dropped `File`
+    into its path, so they go as a web message (`accept_drops` in shelf.rs). Returns false
+    outside WebView2 (the browser preview). */
+export function dropFiles(files: FileList): boolean {
+  const webview = (window as { chrome?: { webview?: { postMessageWithAdditionalObjects?: (message: string, objects: FileList) => void } } })
+    .chrome?.webview;
+  if (!webview?.postMessageWithAdditionalObjects) return false;
+  webview.postMessageWithAdditionalObjects('karsa:shelf-drop', files);
+  return true;
+}
+
 export function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB'];

@@ -15,8 +15,8 @@ tauri-plugin-single-instance = "2.5"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Needed by the `implement` macro (the shelf's drop target); already built for wry.
-windows-core = "0.62"
+# Files dropped on the island arrive as WebView2 web messages; already built for wry.
+webview2-com = "0.39"
 
 [dependencies.windows-sys]
 version = "0.61"
@@ -38,7 +38,7 @@ features = [
   "Win32_UI_WindowsAndMessaging",
 ]
 
-# For the COM parts (the folder picker, dragging and copying files, media controls);
+# For the COM parts (the folder picker, dragging and copying files out, media controls);
 # already built for WebView2, so this adds no download, just these modules.
 [dependencies.windows]
 version = "0.62"
@@ -49,7 +49,6 @@ features = [
   "Win32_Foundation",
   "Win32_System_Com",
   "Win32_System_Ole",
-  "Win32_System_SystemServices",
   "Win32_System_Threading",
   "Win32_UI_Shell",
   "Win32_UI_Shell_Common",
