@@ -7,6 +7,7 @@ import { join } from 'node:path';
 const groups = {
   icons: null, // every file
   eyes: null,
+  mascot: null,
   ornaments: ['kawung-mark.svg', 'kawung-tile.svg', 'aksara-karsa.svg'],
 };
 

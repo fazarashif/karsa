@@ -10,7 +10,7 @@ use tauri_plugin_autostart::ManagerExt;
 
 use crate::db::Db;
 use crate::notes::{self, NotesFolder};
-use crate::{clipboard, hooks, island, reminders, tray};
+use crate::{clipboard, hooks, island, lyrics, reminders, tray};
 
 const HIDE_IN_FULLSCREEN: &str = "island.hide_in_fullscreen";
 const POSITION: &str = "island.position";
@@ -53,6 +53,10 @@ pub struct AppSettings {
     clipboard_paused: bool,
     /// Show what is playing in the pill when nothing else needs it.
     media_in_pill: bool,
+    /// Look up lyrics on lrclib.net (off until turned on: Karsa's only network use).
+    lyrics_enabled: bool,
+    /// Show the current lyric line in the idle pill (needs lyrics).
+    lyric_focus: bool,
 }
 
 #[derive(Deserialize)]
@@ -71,6 +75,8 @@ pub struct Patch {
     clipboard_enabled: Option<bool>,
     clipboard_paused: Option<bool>,
     media_in_pill: Option<bool>,
+    lyrics_enabled: Option<bool>,
+    lyric_focus: Option<bool>,
 }
 
 /// The quick-capture hotkey, Win+Shift+K unless changed; empty when turned off.
@@ -159,6 +165,8 @@ fn current(app: &AppHandle) -> AppSettings {
         clipboard_enabled: db.setting(clipboard::ENABLED).as_deref() != Some("false"),
         clipboard_paused: db.setting(clipboard::PAUSED).as_deref() == Some("true"),
         media_in_pill: db.setting(MEDIA_IN_PILL).as_deref() != Some("false"),
+        lyrics_enabled: lyrics::enabled(&db),
+        lyric_focus: db.setting(lyrics::FOCUS).as_deref() == Some("true"),
     }
 }
 
@@ -248,6 +256,12 @@ pub fn settings_update(app: AppHandle, db: State<'_, Db>, patch: Patch) -> Resul
     clipboard::apply_recording(&db);
     if let Some(show) = patch.media_in_pill {
         put(&db, MEDIA_IN_PILL, Some(if show { "true" } else { "false" }))?;
+    }
+    if let Some(on) = patch.lyrics_enabled {
+        put(&db, lyrics::ENABLED, Some(if on { "true" } else { "false" }))?;
+    }
+    if let Some(on) = patch.lyric_focus {
+        put(&db, lyrics::FOCUS, Some(if on { "true" } else { "false" }))?;
     }
     Ok(changed(&app))
 }

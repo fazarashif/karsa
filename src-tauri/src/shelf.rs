@@ -2,7 +2,9 @@
 //! user removes them. They can be opened, shown in Explorer, copied (then pasted as files
 //! anywhere) or dragged straight out to another app.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use rusqlite::params;
 use serde::Serialize;
@@ -23,6 +25,11 @@ pub struct ShelfItem {
     /// False when the original was moved or deleted.
     exists: bool,
     added_at: i64,
+    /// The icon Explorer shows for it, as a PNG data URL; None for a type Windows does
+    /// not know, which the UI shows as its extension.
+    icon: Option<String>,
+    /// "Microsoft PowerPoint Presentation", "MD File" and the like.
+    type_name: String,
 }
 
 fn notify(app: &AppHandle) {
@@ -45,30 +52,194 @@ fn paths_of(db: &Db, ids: &[i64]) -> Result<Vec<PathBuf>, String> {
     Ok(paths)
 }
 
-/// Newest first.
+/// Newest first. Runs off the UI thread: the files may sit on a slow network drive, and
+/// their icons come from the shell.
 #[tauri::command]
-pub fn shelf_list(db: State<'_, Db>) -> Result<Vec<ShelfItem>, String> {
-    let conn = db.conn();
-    let mut stmt = conn.prepare("SELECT id, path, added_at FROM shelf ORDER BY added_at DESC, id DESC").map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)))
-        .map_err(|e| e.to_string())?;
-    Ok(rows
-        .filter_map(Result::ok)
+pub async fn shelf_list(app: AppHandle) -> Result<Vec<ShelfItem>, String> {
+    tauri::async_runtime::spawn_blocking(move || list(&app.state::<Db>())).await.map_err(|e| e.to_string())?
+}
+
+fn list(db: &Db) -> Result<Vec<ShelfItem>, String> {
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    let rows: Vec<(i64, String, i64)> = {
+        let conn = db.conn();
+        let mut stmt = conn.prepare("SELECT id, path, added_at FROM shelf ORDER BY added_at DESC, id DESC").map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?
+            .filter_map(Result::ok)
+            .collect();
+        rows
+    };
+    // The shell's icon lookup wants COM on the calling thread.
+    let com = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
+    let items = rows
+        .into_iter()
         .map(|(id, path, added_at)| {
             let meta = std::fs::metadata(&path).ok();
             let name = Path::new(&path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let folder = meta.as_ref().is_some_and(|m| m.is_dir());
+            let kind = file_kind(&path, folder, meta.is_some());
             ShelfItem {
                 id,
                 name,
-                folder: meta.as_ref().is_some_and(|m| m.is_dir()),
+                folder,
                 size: meta.as_ref().filter(|m| m.is_file()).map(|m| m.len()),
                 exists: meta.is_some(),
                 path,
                 added_at,
+                icon: kind.icon,
+                type_name: kind.type_name,
             }
         })
-        .collect())
+        .collect();
+    if com {
+        unsafe { CoUninitialize() };
+    }
+    Ok(items)
+}
+
+/// What Explorer shows for a kind of file.
+#[derive(Clone)]
+struct FileKind {
+    icon: Option<String>,
+    type_name: String,
+}
+
+/// Looked up once per extension, or per path for files that carry their own icon.
+static KINDS: Mutex<BTreeMap<String, FileKind>> = Mutex::new(BTreeMap::new());
+
+fn file_kind(path: &str, folder: bool, exists: bool) -> FileKind {
+    let extension = Path::new(path).extension().map(|e| e.to_string_lossy().to_lowercase());
+    // Programs, shortcuts and folders can each have an icon of their own.
+    let own_icon = folder || matches!(extension.as_deref(), Some("exe" | "lnk" | "ico" | "url" | "msc" | "cpl" | "scr" | "appref-ms"));
+    let key = if own_icon { path.to_lowercase() } else { format!(".{}", extension.unwrap_or_default()) };
+    // Held during the lookup: the shell's first lookups fail when two threads race (the
+    // panel refreshing while a drop adds files).
+    let mut kinds = KINDS.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(kind) = kinds.get(&key) {
+        return kind.clone();
+    }
+    // A lookup the shell could not answer is tried again on the next refresh.
+    let Some(kind) = (unsafe { shell_kind(path, folder, exists) }) else {
+        return FileKind { icon: None, type_name: String::new() };
+    };
+    kinds.insert(key, kind.clone());
+    kind
+}
+
+/// The shell's large icon and type name. A missing file is looked up by its extension.
+unsafe fn shell_kind(path: &str, folder: bool, exists: bool) -> Option<FileKind> {
+    use windows_sys::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
+    use windows_sys::Win32::UI::Shell::{
+        SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_TYPENAME, SHGFI_USEFILEATTRIBUTES,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::DestroyIcon;
+
+    let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+    let mut info: SHFILEINFOW = std::mem::zeroed();
+    let mut flags = SHGFI_ICON | SHGFI_LARGEICON | SHGFI_TYPENAME;
+    if !exists {
+        flags |= SHGFI_USEFILEATTRIBUTES;
+    }
+    let attributes = if folder { FILE_ATTRIBUTE_DIRECTORY } else { FILE_ATTRIBUTE_NORMAL };
+    if SHGetFileInfoW(wide.as_ptr(), attributes, &mut info, std::mem::size_of::<SHFILEINFOW>() as u32, flags) == 0 {
+        return None;
+    }
+    let len = info.szTypeName.iter().position(|&c| c == 0).unwrap_or(info.szTypeName.len());
+    let type_name = String::from_utf16_lossy(&info.szTypeName[..len]);
+    let icon = icon_png(info.hIcon);
+    if !info.hIcon.is_null() {
+        DestroyIcon(info.hIcon);
+    }
+    let icon = icon?;
+    // The blank page Windows shows for a type it does not know says nothing: the UI shows
+    // the extension instead. Its index in the system image list varies, so compare pixels.
+    let unknown = !folder && unknown_type_icon().as_ref() == Some(&icon);
+    Some(FileKind { icon: (!unknown).then_some(icon), type_name })
+}
+
+/// The icon Windows shows for a type it does not know, as `icon_png` makes it.
+fn unknown_type_icon() -> &'static Option<String> {
+    static ICON: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    ICON.get_or_init(|| unsafe {
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
+        use windows_sys::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_USEFILEATTRIBUTES};
+        use windows_sys::Win32::UI::WindowsAndMessaging::DestroyIcon;
+        let name: Vec<u16> = "file.karsa-unknown-type".encode_utf16().chain(Some(0)).collect();
+        let mut info: SHFILEINFOW = std::mem::zeroed();
+        let flags = SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES;
+        if SHGetFileInfoW(name.as_ptr(), FILE_ATTRIBUTE_NORMAL, &mut info, std::mem::size_of::<SHFILEINFOW>() as u32, flags) == 0 {
+            return None;
+        }
+        let icon = icon_png(info.hIcon);
+        if !info.hIcon.is_null() {
+            DestroyIcon(info.hIcon);
+        }
+        icon
+    })
+}
+
+/// An icon as a PNG data URL, keeping its transparency.
+pub(crate) unsafe fn icon_png(icon: windows_sys::Win32::UI::WindowsAndMessaging::HICON) -> Option<String> {
+    use windows_sys::Win32::Graphics::Gdi::{DeleteObject, GetObjectW, BITMAP};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
+
+    let mut info: ICONINFO = std::mem::zeroed();
+    if icon.is_null() || GetIconInfo(icon, &mut info) == 0 {
+        return None;
+    }
+    let png = (|| {
+        if info.hbmColor.is_null() {
+            return None; // a black-and-white icon; the UI shows the extension instead
+        }
+        let mut bitmap: BITMAP = std::mem::zeroed();
+        if GetObjectW(info.hbmColor, std::mem::size_of::<BITMAP>() as i32, &mut bitmap as *mut BITMAP as _) == 0 {
+            return None;
+        }
+        let (width, height) = (bitmap.bmWidth, bitmap.bmHeight);
+        let mut pixels = dib_pixels(info.hbmColor, width, height)?;
+        if pixels.chunks_exact(4).all(|p| p[3] == 0) {
+            // An old icon without an alpha channel: its mask says which pixels show.
+            let mask = dib_pixels(info.hbmMask, width, height)?;
+            for (pixel, mask) in pixels.chunks_exact_mut(4).zip(mask.chunks_exact(4)) {
+                pixel[3] = if mask[0] == 0 { 255 } else { 0 };
+            }
+        }
+        for pixel in pixels.chunks_exact_mut(4) {
+            pixel.swap(0, 2); // BGRA to RGBA
+        }
+        let mut bytes = Vec::new();
+        let mut encoder = png::Encoder::new(&mut bytes, width as u32, height as u32);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().ok()?.write_image_data(&pixels).ok()?;
+        Some(format!("data:image/png;base64,{}", crate::media::base64(&bytes)))
+    })();
+    if !info.hbmColor.is_null() {
+        DeleteObject(info.hbmColor);
+    }
+    DeleteObject(info.hbmMask);
+    png
+}
+
+/// A bitmap's pixels as top-down 32-bit BGRA.
+unsafe fn dib_pixels(bitmap: windows_sys::Win32::Graphics::Gdi::HBITMAP, width: i32, height: i32) -> Option<Vec<u8>> {
+    use windows_sys::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, DeleteDC, GetDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    };
+    let mut header: BITMAPINFO = std::mem::zeroed();
+    header.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+    header.bmiHeader.biWidth = width;
+    header.bmiHeader.biHeight = -height;
+    header.bmiHeader.biPlanes = 1;
+    header.bmiHeader.biBitCount = 32;
+    header.bmiHeader.biCompression = BI_RGB;
+    let mut pixels = vec![0u8; (width * height * 4) as usize];
+    let dc = CreateCompatibleDC(std::ptr::null_mut());
+    let lines = GetDIBits(dc, bitmap, 0, height as u32, pixels.as_mut_ptr() as _, &mut header, DIB_RGB_COLORS);
+    DeleteDC(dc);
+    (lines == height).then_some(pixels)
 }
 
 /// Puts files on the shelf (again at the top, if already there). Returns how many.

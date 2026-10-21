@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emitLocal, inTauri, on, type AlertPayload } from './bridge';
-import { dayFromToday } from './format.svelte';
+import { dayFromToday, toDateInput } from './format.svelte';
+import { react } from './reactions.svelte';
 
 export type Phase = 'focus' | 'short_break' | 'long_break';
 export type Status = 'ready' | 'running' | 'paused' | 'waiting';
@@ -58,13 +59,34 @@ function apply(next: FocusState) {
   void refreshStats();
 }
 
+/** Whether the history has been read once, so the first read does not count as growth. */
+let historyLoaded = false;
+
 async function refreshStats() {
   const since = dayFromToday(0);
   today = inTauri ? await invoke('focus_stats', { since }) : previewStats(since);
   const historySince = dayFromToday(-HISTORY_DAYS);
+  const before = streakDays(history, new Date());
   history = inTauri
     ? await invoke<[number, number][]>('focus_history', { since: historySince })
     : [...previewHistory(), ...previewSessions.filter((s) => s.endedAt >= historySince).map((s): [number, number] => [s.endedAt, s.minutes * 60_000])];
+  if (historyLoaded && streakDays(history, new Date()) > before) react('gumun', 1600);
+  historyLoaded = true;
+}
+
+/** Days in a row with focus, counted back from today (or from yesterday while today has
+    nothing yet, so the streak is not broken before the day is over). */
+export function streakDays(sessions: [number, number][], now: Date) {
+  const days = new Set(sessions.map(([endedAt]) => toDateInput(endedAt)));
+  const day = new Date(now);
+  day.setHours(0, 0, 0, 0);
+  if (!days.has(toDateInput(day.getTime()))) day.setDate(day.getDate() - 1);
+  let count = 0;
+  while (days.has(toDateInput(day.getTime()))) {
+    count++;
+    day.setDate(day.getDate() - 1);
+  }
+  return count;
 }
 
 async function command(cmd: string) {

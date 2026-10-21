@@ -106,15 +106,37 @@
           onchange={(v) => settings.update({ hideInFullscreen: v })}
         />
       </div>
+    </section>
+
+    <section>
+      <h3 class="caps">Now playing</h3>
       <div class="row">
         <span class="grow">
-          <span class="label">Show what's playing in the pill</span>
+          <span class="label">Show media in the pill</span>
           <span class="hint">Music or video from Spotify, a browser and the like, when nothing else is due. Peek always has the controls.</span>
         </span>
         <Switch
           checked={s.mediaInPill}
-          label="Show what's playing in the pill"
+          label="Show media in the pill"
           onchange={(v) => settings.update({ mediaInPill: v })}
+        />
+      </div>
+      <div class="row">
+        <span class="grow">
+          <span class="label">Lyrics</span>
+          <span class="hint">Looks up lyrics on lrclib.net. It sends the title, artist, album and length of what is playing, and nothing else.</span>
+        </span>
+        <Switch checked={s.lyricsEnabled} label="Lyrics" onchange={(v) => settings.update({ lyricsEnabled: v })} />
+      </div>
+      <div class="row" class:off={!s.lyricsEnabled}>
+        <span class="grow">
+          <span class="label">Lyric focus</span>
+          <span class="hint">Shows the current lyric line in the pill instead of the title. Needs Lyrics.</span>
+        </span>
+        <Switch
+          checked={s.lyricsEnabled && s.lyricFocus}
+          label="Lyric focus"
+          onchange={(v) => s.lyricsEnabled && settings.update({ lyricFocus: v })}
         />
       </div>
     </section>
@@ -289,6 +311,11 @@
 
   .row:last-child {
     border-bottom: 0;
+  }
+
+  /* A setting that needs another one turned on first. */
+  .row.off {
+    opacity: var(--o-disabled);
   }
 
   .row .grow {

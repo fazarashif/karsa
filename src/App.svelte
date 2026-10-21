@@ -1,15 +1,17 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { BOX, NOTCH, PEEK_MEDIA_ROW, PILL, TIMING, type Box, type Mode } from './lib/config';
+  import { BOX, NOTCH, PEEK_MEDIA_ROW, PILL, SHAPE, TIMING, type Box, type Mode } from './lib/config';
   import { core, emitLocal, inTauri, on, type AlertPayload } from './lib/bridge';
   import { clock } from './lib/clock.svelte';
   import { handleEscape } from './lib/escape';
   import { focus, formatCountdown } from './lib/focus.svelte';
   import { formatTime, prefs, toDateInput } from './lib/format.svelte';
   import { contentOut } from './lib/motion';
+  import { lyrics } from './lib/lyrics.svelte';
   import { media, previewMedia } from './lib/media.svelte';
   import { idleMood } from './lib/mood.svelte';
   import { pointer } from './lib/pointer.svelte';
+  import { react } from './lib/reactions.svelte';
   import { nextToday, reminders } from './lib/reminders.svelte';
   import { settings } from './lib/settings.svelte';
   import { dropFiles } from './lib/shelf.svelte';
@@ -35,7 +37,8 @@
   // timer, the next reminder today, then the eyes. Never the clock: the taskbar has it.
   // The notch sits over title bars all day, so it leaves later reminders to Peek.
   const pillContent: PillContent = $derived.by(() => {
-    if (alert) return { kind: 'alert', alert };
+    // Only a waiting alert takes the pill; a new one first shows kaget eyes for a moment.
+    if (alert && alertHeld) return { kind: 'alert', alert };
     const now = clock.now;
     const next = nextToday(reminders.all, now);
     const minutes = next ? Math.ceil((next.at - now.getTime()) / 60_000) : Infinity;
@@ -55,8 +58,12 @@
       };
     }
     if (next && !notch) return { kind: 'due', title: next.title, detail: formatTime(next.at), color };
-    // What is playing, only while it plays: a track paused all afternoon is not news.
+    // Lyric focus: the line being sung, in place of the title (design v2, 4.9).
     const playing = media.state;
+    if (settings.current.lyricsEnabled && settings.current.lyricFocus && playing.playing && lyrics.status === 'timed' && lyrics.line) {
+      return { kind: 'lyric', line: lyrics.line };
+    }
+    // What is playing, only while it plays: a track paused all afternoon is not news.
     if (settings.current.mediaInPill && playing.active && playing.playing) {
       return { kind: 'media', title: playing.title, artist: playing.artist, art: playing.art };
     }
@@ -66,7 +73,7 @@
   let pointerInside = false;
   let fullscreen = false;
   /** The alert's hold time has passed, so moving the pointer away collapses it. */
-  let alertHeld = false;
+  let alertHeld = $state(false);
   const heldDuringFullscreen: AlertPayload[] = [];
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   let alertTimer: ReturnType<typeof setTimeout> | undefined;
@@ -79,7 +86,9 @@
       ? { width: pillWidth, ...(notch ? NOTCH : PILL) }
       : mode === 'peek' && media.state.active
         ? { ...BOX.peek, height: BOX.peek.height + PEEK_MEDIA_ROW }
-        : BOX[mode],
+        : mode === 'expanded'
+          ? { ...SHAPE[panel.view], radius: BOX.expanded.radius }
+          : BOX[mode],
   );
 
   function applyRegion(width: number, height: number) {
@@ -111,12 +120,27 @@
     mode = next;
   }
 
+  /** When the mripat last glanced at overdue tasks (at most once per 10 minutes). */
+  let lastGlance = 0;
+
+  function overdue(now: number) {
+    const midnight = new Date(now).setHours(0, 0, 0, 0);
+    return todo.tasks.some((t) => !t.done && t.dueAt !== null && t.dueAt < (t.dueHasTime ? now : midnight));
+  }
+
   function onPointer(inside: boolean) {
     pointerInside = inside;
     clearTimeout(hoverTimer);
     if (inside) {
       if (mode === 'idle') {
         blinkKey++;
+        // Cheeky but quiet (design v2, C4): with tasks overdue, a short sulky glance after
+        // the blink, no text and no nagging.
+        const now = Date.now();
+        if (now - lastGlance > 10 * 60_000 && overdue(now)) {
+          lastGlance = now;
+          setTimeout(() => react('mrengut', 1600), 160);
+        }
         hoverTimer = setTimeout(() => (mode = alert ? 'alert' : 'peek'), notch ? TIMING.hoverOpenNotch : TIMING.hoverOpen);
       }
     } else if (mode === 'peek' || (mode === 'alert' && alertHeld)) {
@@ -134,12 +158,15 @@
     if (mode !== 'expanded') return;
     panel.rampung = false;
     panel.capture = false;
+    panel.nowPlaying = false;
     setMode('idle');
     core.setInteractive(false, restoreFocus);
   }
 
   /** Alerts that arrived while another one was showing, oldest first. */
   const queued: AlertPayload[] = [];
+  /** Counts presented alerts, so a delayed open belongs to the alert that scheduled it. */
+  let alertSeq = 0;
 
   function showAlert(next: AlertPayload) {
     if (fullscreen) {
@@ -162,11 +189,24 @@
       return;
     }
     alertHeld = false;
-    setMode('alert');
-    alertTimer = setTimeout(() => {
-      alertHeld = true;
-      if (mode === 'alert' && !pointerInside) mode = 'idle';
-    }, TIMING.alertHold);
+    react('kaget', 600);
+    // A sequence number, not the object: $state hands back a proxy, never `next` itself.
+    const seq = ++alertSeq;
+    const open = () => {
+      if (seq !== alertSeq || !alert || mode === 'expanded') return;
+      setMode('alert');
+      alertTimer = setTimeout(() => {
+        alertHeld = true;
+        if (mode === 'alert' && !pointerInside) mode = 'idle';
+      }, TIMING.alertHold);
+    };
+    // The eyes jump first, then the alert grows out of the pill (design v2, section 5).
+    if (mode === 'idle' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      clearTimeout(alertTimer);
+      alertTimer = setTimeout(open, 240);
+    } else {
+      open();
+    }
   }
 
   function clearAlert() {
@@ -206,6 +246,13 @@
     dismissAlert();
     focus[action]();
   }
+
+  // Lyric focus needs the lyrics while the panel is closed too; turning lyrics off forgets them.
+  $effect(() => {
+    const s = settings.current;
+    if (!s.lyricsEnabled) return lyrics.reset();
+    if (s.lyricFocus && media.state.active && media.state.title) void lyrics.load();
+  });
 
   // Rampung is offered once a day on weekdays at the time set in Settings, never while a
   // focus phase runs. "Later" offers it again 30 minutes on. Checked on the minute clock,
@@ -358,6 +405,8 @@
       return;
     }
     if (pillContent.kind === 'focus') panel.tab = 'focus';
+    if (pillContent.kind === 'media' || pillContent.kind === 'lyric') panel.showNowPlaying('pill');
+    else panel.nowPlaying = false;
     void expand();
   }
 
@@ -418,6 +467,7 @@
     const offs = [
       on('island://blur', () => collapse(false)),
       on('island://open', (target) => {
+        panel.nowPlaying = false;
         if (target === 'rampung') return startRampung();
         if (target) panel.tab = target;
         void expand();

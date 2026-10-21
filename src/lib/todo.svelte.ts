@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { inTauri, on } from './bridge';
+import { react } from './reactions.svelte';
 
 export type List = { id: number; name: string; position: number };
 
@@ -67,9 +68,19 @@ export const todo = {
   moveList: (id: number, direction: -1 | 1) => run('todo_move_list', { id, direction }),
   createTask: (listId: number, title: string, parentId: number | null = null, notePath: string | null = null) =>
     run('todo_create_task', { listId, title, parentId, notePath }),
-  updateTask: (id: number, patch: { title?: string; done?: boolean; listId?: number }) =>
-    run('todo_update_task', { id, ...patch }),
+  updateTask: (id: number, patch: { title?: string; done?: boolean; listId?: number }) => {
+    if (patch.done) react('seneng', 1200);
+    return run('todo_update_task', { id, ...patch });
+  },
   setDue: (id: number, dueAt: number | null, hasTime: boolean) => run('todo_set_due', { id, dueAt, hasTime }),
+  /** Adds a task with its deadline, e.g. "+ Task" on a calendar day. */
+  createTaskDue: async (listId: number, title: string, dueAt: number, hasTime: boolean) => {
+    await run('todo_create_task', { listId, title, parentId: null, notePath: null });
+    const created = snapshot.tasks
+      .filter((t) => t.listId === listId && t.parentId === null && t.title === title.trim())
+      .sort((a, b) => b.id - a.id)[0];
+    if (created) await run('todo_set_due', { id: created.id, dueAt, hasTime });
+  },
   deleteTask: (id: number) => run('todo_delete_task', { id }),
 };
 

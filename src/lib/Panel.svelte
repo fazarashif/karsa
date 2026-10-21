@@ -1,14 +1,18 @@
 <script lang="ts">
+  import CalendarTab from './calendar/CalendarTab.svelte';
   import { clock } from './clock.svelte';
+  import { SHAPE } from './config';
   import FocusTab from './focus/FocusTab.svelte';
   import Eyes from './Eyes.svelte';
   import { formatDate, formatTime } from './format.svelte';
   import Icon from './Icon.svelte';
   import { greeting, pasaran } from './jawa';
+  import { media } from './media.svelte';
   import { mood } from './mood.svelte';
   import { settings } from './settings.svelte';
   import { tabIn, tabOut } from './motion';
   import NotesTab from './notes/NotesTab.svelte';
+  import NowPlaying from './nowplaying/NowPlaying.svelte';
   import Capture from './capture/Capture.svelte';
   import Rampung from './rampung/Rampung.svelte';
   import ShelfTab from './shelf/ShelfTab.svelte';
@@ -22,9 +26,12 @@
     { id: 'focus', label: 'Focus' },
     { id: 'notes', label: 'Notes' },
     { id: 'reminders', label: 'Reminders' },
+    { id: 'calendar', label: 'Calendar', icon: 'calendar-month' },
     { id: 'shelf', label: 'Shelf', icon: 'shelf' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
+
+  const shape = $derived(SHAPE[panel.view]);
 
   let tabEls = $state<HTMLButtonElement[]>([]);
   let underline = $state({ x: 0, width: 0 });
@@ -35,7 +42,12 @@
   });
 </script>
 
-<div class="panel" aria-keyshortcuts="Escape">
+<!-- The panel takes its view's shape at once; the island box morphs to it around the
+     content (design v2, 3.1), so the content never reflows during the spring. -->
+{#if panel.nowPlaying}
+  <NowPlaying onclose={panel.collapse} onback={panel.nowPlayingFrom === 'panel' ? () => (panel.nowPlaying = false) : undefined} />
+{:else}
+<div class="panel" style:width="{shape.width}px" style:height="{shape.height}px" aria-keyshortcuts="Escape">
   <span class="wm"><Icon name="ornaments/aksara-karsa" width={147} height={60} /></span>
 
   <header class="beat" style="--i: 0">
@@ -45,6 +57,17 @@
     </span>
     <span class="date-row">
       <span class="date">{formatDate(clock.now)}<span class="pasaran">{pasaran(clock.now)}</span></span>
+      {#if media.state.active}
+        <button
+          class="playing"
+          class:paused={!media.state.playing}
+          title="Now playing · {media.state.title}"
+          onclick={() => panel.showNowPlaying('panel')}
+        >
+          {#if media.state.appIcon}<img src={media.state.appIcon} alt="" />{:else}<Icon name="music" size={12} />{/if}
+          <span class="ell">{media.state.title}</span>
+        </button>
+      {/if}
       <span class="muted num">{formatTime(clock.now)}</span>
     </span>
   </header>
@@ -92,6 +115,8 @@
           <RemindersTab />
         {:else if panel.tab === 'settings'}
           <SettingsTab />
+        {:else if panel.tab === 'calendar'}
+          <CalendarTab />
         {:else if panel.tab === 'shelf'}
           <ShelfTab />
         {:else}
@@ -102,6 +127,7 @@
   </div>
   {/if}
 </div>
+{/if}
 
 <style>
   .panel {
@@ -109,8 +135,6 @@
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    width: var(--panel-w);
-    height: var(--panel-h);
     padding: 16px 16px 12px;
   }
 
@@ -147,7 +171,41 @@
   }
 
   .date {
+    flex: none;
     font: var(--fw-semibold) var(--fs-title-lg) / var(--lh-title-lg) var(--font-text);
+  }
+
+  /* What is playing, between the date and the time: opens Now playing. */
+  .playing {
+    flex: 0 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 150px;
+    height: 24px;
+    margin: 0 8px 0 auto;
+    padding: 0 10px 0 6px;
+    border-radius: 12px;
+    background: var(--surface);
+    font: var(--fw-semibold) var(--fs-caption) / 16px var(--font-text);
+    color: var(--fg);
+    align-self: center;
+  }
+
+  .playing:hover {
+    background: var(--surface-hover);
+  }
+
+  .playing.paused {
+    color: var(--muted);
+  }
+
+  .playing img {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
   }
 
   /* Today's Javanese market day, after the date. */
@@ -162,7 +220,7 @@
   .tabs {
     position: relative;
     display: flex;
-    gap: 20px;
+    gap: var(--tab-gap);
     padding: 0 4px;
     border-bottom: 1px solid var(--hairline);
   }
@@ -184,7 +242,7 @@
     outline-offset: -2px;
   }
 
-  /* Shelf and Settings: icons at the far end of the tab row, close together. */
+  /* Calendar, Shelf and Settings: icons at the far end of the tab row, 4 px apart. */
   .tab.icon-tab {
     margin-left: auto;
     width: 28px;
@@ -193,7 +251,7 @@
   }
 
   .tab.icon-tab + .tab.icon-tab {
-    margin-left: -16px;
+    margin-left: calc(4px - var(--tab-gap));
   }
 
   /* One 1 px bar scaled to the active tab's width, so moving it only animates transform. */

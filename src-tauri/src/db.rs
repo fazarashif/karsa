@@ -177,5 +177,32 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
              COMMIT;",
         )?;
     }
+    if version < 7 {
+        // Lyrics from LRCLIB, one row per song (artist and title, lowercase), "not found"
+        // included (found = 0; 2 means instrumental), with the user's timing nudge.
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE lyrics (
+               key TEXT PRIMARY KEY,
+               synced TEXT,
+               plain TEXT,
+               found INTEGER NOT NULL,
+               offset_ms INTEGER NOT NULL DEFAULT 0,
+               fetched_at INTEGER NOT NULL
+             );
+             PRAGMA user_version = 7;
+             COMMIT;",
+        )?;
+    }
+    if version < 8 {
+        // The first lyrics lookup cleaned YouTube titles badly, so its "not found" answers
+        // are forgotten and asked again.
+        conn.execute_batch(
+            "BEGIN;
+             DELETE FROM lyrics WHERE found = 0;
+             PRAGMA user_version = 8;
+             COMMIT;",
+        )?;
+    }
     Ok(())
 }

@@ -37,7 +37,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 /// Logical size of the island window. Must match `WINDOW` in src/lib/config.ts.
-pub const WINDOW_SIZE: (f64, f64) = (400.0, 540.0);
+pub const WINDOW_SIZE: (f64, f64) = (560.0, 640.0);
 /// Gap between the corner island and the edges of the work area, in logical px.
 /// The notch has none: it hangs from the top edge.
 const MARGIN: f64 = 12.0;
@@ -217,6 +217,12 @@ pub fn set_hidden(hidden: bool) {
 
 /// The panel needs keyboard input, so it may take focus; every other state never does.
 pub fn set_interactive(active: bool, restore_focus: bool) {
+    // KARSA_TEST_NO_FOCUS keeps a test instance from ever taking the user's focus; tests
+    // drive the panel through DevTools and need no keyboard.
+    static NO_FOCUS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *NO_FOCUS.get_or_init(|| std::env::var_os("KARSA_TEST_NO_FOCUS").is_some()) {
+        return;
+    }
     let hwnd = hwnd();
     unsafe {
         if active {

@@ -1,6 +1,6 @@
-/* Karsa design tokens v1. Drop-in for src/app.css :root.
-   Names kept from M0: --island-bg --fg --muted --faint --hairline --surface --surface-hover
-   --accent --focus --spring --morph-duration. Changed values are marked "M0:". */
+/* Karsa design tokens v2. Drop-in for src/app.css :root.
+   Every v1 name is kept. New in v2 is marked "v2". Changed values are marked "v1:".
+   Retired names stay defined for one release and are marked "retired". */
 :root {
   /* Palette (raw) */
   --kuningan: #D4A84B;      /* brass gold */
@@ -18,33 +18,35 @@
   --island-bg: #000000;
   --fg: #F5F5F7;
   --muted: #EBEBF58F;       /* 0.56, 5.6:1 */
-  --faint: #EBEBF580;       /* 0.50, 4.6:1. M0: 0.32 (2.3:1, failed AA) */
+  --faint: #EBEBF580;       /* 0.50, 4.6:1 */
   --disabled: #EBEBF552;    /* 0.32, non-text and disabled only */
-  --hairline: #FFFFFF17;    /* 0.09 */
-  --hairline-strong: #FFFFFF29; /* 0.16 */
-  --surface: #FFFFFF12;     /* 0.07 */
-  --surface-hover: #FFFFFF1F; /* 0.12 */
-  --surface-pressed: #FFFFFF29; /* 0.16 */
-  --track: #FFFFFF1F;       /* progress track */
+  --hairline: #FFFFFF17;
+  --hairline-strong: #FFFFFF29;
+  --surface: #FFFFFF12;
+  --surface-hover: #FFFFFF1F;
+  --surface-pressed: #FFFFFF29;
+  --track: #FFFFFF1F;
   --popover-bg: #141414;
   --checkbox-border: #EBEBF580;
   --edge: inset 0 0 0 1px #FFFFFF12;
-  /* The notch hangs from the top of the screen, so its edge leaves out the top side. */
   --edge-notch: inset 1px 0 0 #FFFFFF12, inset -1px 0 0 #FFFFFF12, inset 0 -1px 0 #FFFFFF12;
   --focus-ring: #EFE6D2B3;
+  --search-hit: #D4A84B3D;  /* v2: highlighted search match, 24% kuningan */
+  --selected-bg: #FFFFFF1F; /* v2: selected calendar day, selected segment */
 
   /* Semantic accents */
-  --accent: var(--kuningan);         /* M0: #ff9f0a */
+  --accent: var(--kuningan);
   --accent-hover: var(--kuningan-hover);
   --accent-pressed: var(--kuningan-pressed);
   --on-accent: #000000;
-  --focus: var(--kuningan);          /* M0: #30d158 */
+  --focus: var(--kuningan);
   --meeting: var(--sogan);
   --deadline: var(--bata);
   --general: var(--gading);
   --done: var(--daun);
   --danger: var(--abang);
   --ornament: var(--sogan-deep);
+  --priority: var(--kuningan);  /* v2: starred task */
   --focus-tint: #D4A84B29;
   --meeting-tint: #C0855229;
   --deadline-tint: #D9644A29;
@@ -52,11 +54,23 @@
   --done-tint: #A8B46A29;
   --danger-tint: #F07A6A29;
 
-  /* Eyes */
+  /* Mascot (v2). Eye colours keep their v1 names. */
   --eye-sclera: var(--gading);
   --eye-iris: var(--iris);
   --eye-glint: #FFFFFF;
-  --eye-blush: #D9644A8C;  /* 0.55 */
+  --eye-blush: #D9644A8C;
+  --blangkon: var(--sogan);          /* v2: dome */
+  --blangkon-deep: var(--sogan-deep); /* v2: band, mondolan, pleat, kawung */
+  --brow: var(--gading);             /* v2 */
+  --mascot-accent: var(--kuningan);  /* v2: sparkle, note, gumun glints, fokus lids */
+
+  /* Kain (v2: one cell size, level by colour) */
+  --kain-0: #FFFFFF1F;
+  --kain-1: var(--sogan-deep);  /* 1-24 min */
+  --kain-2: var(--sogan);       /* 25-74 min */
+  --kain-3: var(--kuningan);    /* 75+ min */
+  --kain-cell: 12px;
+  --kain-gap: 4px;
 
   /* Typography */
   --font-text: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
@@ -66,6 +80,9 @@
   --fs-title: 15px;    --lh-title: 20px;
   --fs-title-lg: 17px; --lh-title-lg: 22px;
   --fs-timer: 56px;    --lh-timer: 60px;
+  --fs-lyric: 15px;    --lh-lyric: 24px;   /* v2: current lyric line */
+  --fs-lyric-other: 13px; --lh-lyric-other: 24px; /* v2 */
+  --fs-h1-note: 17px;  --fs-h2-note: 15px; /* v2: live Markdown headings */
   --fw-regular: 400;
   --fw-semibold: 600;
   --tracking-caps: 0.06em;
@@ -92,29 +109,68 @@
   --radius-pill: 16px;
   --radius-card: 22px;
   --radius-panel: 26px;
-
-  /* Sizes */
-  --window-w: 400px;  --window-h: 540px;
-  --pill-h: 32px;     --pill-min-w: 72px;  --pill-max-w: 220px;
-  /* The pill as a notch at the top of the screen: slimmer, so it hides less of the title bars below. */
-  --notch-h: 26px;    --notch-min-w: 80px; --notch-max-w: 200px;
   --radius-notch: 12px;
-  --peek-w: 320px;    --peek-h: 172px;
-  --panel-w: 380px;   --panel-h: 520px;
+  --radius-art: 8px;      /* v2: album art 56 */
+  --radius-art-sm: 4px;   /* v2: album art 16-20 */
+  --radius-day: 10px;     /* v2: calendar day cell */
+
+  /* Window envelope (v2). Fixed at runtime; the region clips to the shape. */
+  --window-w: 560px;  /* v1: 400px */
+  --window-h: 640px;  /* v1: 540px */
+  --overshoot-pad: 10px;
+
+  /* Pill and notch */
+  --pill-h: 32px;     --pill-min-w: 72px;  --pill-max-w: 220px;
+  --notch-h: 26px;    --notch-min-w: 80px; --notch-max-w: 200px;
+  --pill-progress-h: 2px;   /* v2: thin progress line inside the pill */
+  --pill-art: 20px;         /* v2 */
+  --notch-art: 16px;        /* v2 */
+  --lyric-max-w: 220px;     /* v2: corner */
+  --lyric-max-w-notch: 360px; /* v2 was 200; widened on the user's feedback (M8) */
+
+  /* Shapes (v2). w x h, all with --radius-panel unless noted. */
+  --peek-w: 320px;    --peek-h: 172px;  --peek-media-h: 210px; /* v2: +26 with a Playing row */
   --alert-w: 320px;   --alert-h: 112px;
+  --drop-w: 320px;    --drop-h: 112px;
+  --capture-w: 360px; --capture-h: 140px;         /* v2, --radius-card */
+  --nowplaying-w: 520px; --nowplaying-h: 212px;   /* v2 */
+  --nowplaying-lyrics-h: 420px;                   /* v2 */
+  --panel-w: 380px;   --panel-h: 520px;           /* Todo, Notes list */
+  --focus-w: 380px;   --focus-h: 500px;           /* v2 */
+  --editor-w: 420px;  --editor-h: 620px;          /* v2: note and meeting note */
+  --calendar-w: 400px; --calendar-h: 600px;       /* v2 */
+  --shelf-w: 400px;   --shelf-h: 520px;           /* v2 */
+  --settings-w: 400px; --settings-h: 560px;       /* v2 */
+  --rampung-w: 380px; --rampung-h: 480px;         /* v2 */
+
+  /* Controls */
   --control-h: 36px;
-  --button-h: 28px;
+  --control-h-sm: 32px;   /* v2: search, select */
+  --button-h: 28px;       /* every text button (A6) */
   --icon-button: 28px;
+  --round-button: 40px;
+  --round-button-lg: 44px; /* v2: play/pause in Now playing. v1 Focus used 56 */
+  --segment-h: 28px;      /* v2 */
+  --chip-h: 28px;         /* v2 */
   --tab-h: 32px;
+  --tab-gap: 16px;        /* v2. v1: 20px, to fit the Calendar icon tab */
   --icon: 16px;
   --kawung: 10px;
   --eyes-w: 28px;     --eyes-h: 14px;
+  --eyes-notch-w: 24px; --eyes-notch-h: 12px;
+  --head-sm: 28px 21px;  /* v2: blangkon + eyes */
+  --head-lg: 28px 26px;  /* v2: blangkon + brows + eyes, in units; scaled */
+  --seek-h: 4px;          /* v2 */
+  --seek-hit: 16px;       /* v2: pointer target */
+  --day-cell-w: 52px; --day-cell-h: 44px; /* v2 */
+  --dot: 4px;             /* v2: calendar type dot */
+  --focus-bar-h: 2px;     /* v2: calendar focus minutes */
 
   /* Opacity */
   --o-disabled: 0.32;
   --o-watermark: 0.06;
 
-  /* Motion. Damped spring (zeta 0.78, ~2% overshoot), sampled for CSS linear(). */
+  /* Motion */
   --spring: linear(0, 0.015, 0.0544, 0.1111, 0.1792, 0.254, 0.3317, 0.4093, 0.4847, 0.5562, 0.6228,
       0.6838, 0.7387, 0.7876, 0.8305, 0.8677, 0.8995, 0.9263, 0.9486, 0.9669, 0.9817, 0.9933, 1.0022,
       1.0089, 1.0137, 1.0169, 1.0188, 1.0198, 1.0199, 1.0194, 1.0185, 1.0173, 1.0159, 1.0144, 1.0128,
@@ -128,11 +184,24 @@
   --dur-content-in: 220ms;
   --dur-content-out: 100ms;
   --delay-content-in: 90ms;
-  --beat: 60ms;          /* gamelan stagger step */
-  --beat-max: 5;         /* rows after the 5th share the last beat */
+  --beat: 60ms;
+  --beat-max: 5;
   --dur-blink: 140ms;
   --dur-gong: 240ms;
   --dur-tab: 160ms;
+  --dur-expression: 160ms;  /* v2: crossfade between expressions */
+  --dur-kaget: 600ms;       /* v2 */
+  --dur-seneng: 1200ms;     /* v2 */
+  --dur-gumun: 1600ms;      /* v2 */
+  --dur-nyanyi: 1600ms;     /* v2: on track start */
+  --dur-glance: 1600ms;     /* v2: mrengut glance at overdue tasks */
+  --dur-lyric: 220ms;       /* v2: new lyric line, slide 6px + fade */
+  --lyric-shift: 6px;       /* v2 */
+  --dur-track: 240ms;       /* v2: track change */
+  --dur-month: 200ms;       /* v2: month change, slide 12px + fade */
+  --month-shift: 12px;      /* v2 */
+  --dur-check: 180ms;       /* v2: checkbox fill */
+  --dur-weave: 400ms;       /* v2: Rampung, today's kain cell */
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -148,5 +217,14 @@
     --dur-blink: 0ms;
     --dur-gong: 0ms;
     --dur-tab: 0ms;
+    --dur-expression: 0ms;
+    --dur-lyric: 0ms;
+    --lyric-shift: 0px;
+    --dur-track: 0ms;
+    --dur-month: 0ms;
+    --month-shift: 0px;
+    --dur-check: 0ms;
+    --dur-weave: 0ms;
+    /* Expression holds (--dur-kaget etc.) keep their length: they are states, not motion. */
   }
 }

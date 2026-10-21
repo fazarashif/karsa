@@ -7,6 +7,7 @@ mod focus;
 mod hooks;
 mod island;
 mod localtime;
+mod lyrics;
 mod media;
 mod notes;
 mod reminders;
@@ -155,6 +156,8 @@ fn main() {
             shelf::shelf_drag,
             media::media_state,
             media::media_control,
+            lyrics::lyrics_get,
+            lyrics::lyrics_offset,
         ])
         .on_window_event(|_window, event| {
             if let WindowEvent::ScaleFactorChanged { .. } = event {

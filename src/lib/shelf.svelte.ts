@@ -11,7 +11,17 @@ export type ShelfItem = {
   /** False when the original was moved or deleted. */
   exists: boolean;
   addedAt: number;
+  /** The icon Explorer shows for it (a PNG data URL); null for a type Windows does not know. */
+  icon: string | null;
+  /** "Microsoft PowerPoint Presentation", "MD File" and the like. */
+  typeName: string;
 };
+
+/** "PPTX" for "Slides.pptx"; empty when the name has no extension. */
+export function extensionOf(name: string) {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot + 1).toUpperCase() : '';
+}
 
 let items = $state<ShelfItem[]>([]);
 let error = $state<string | null>(null);
@@ -117,14 +127,15 @@ export function formatSize(bytes: number) {
 
 let previewId = 3;
 let previewItems: ShelfItem[] = [
-  { id: 2, path: 'C:\\Users\\you\\Downloads\\Q3 roadmap.pdf', name: 'Q3 roadmap.pdf', folder: false, size: 2_400_000, exists: true, addedAt: Date.now() - 20 * 60_000 },
-  { id: 1, path: 'C:\\Users\\you\\Pictures\\whiteboard.jpg', name: 'whiteboard.jpg', folder: false, size: 840_000, exists: false, addedAt: Date.now() - 3 * 3_600_000 },
+  { id: 3, path: 'C:\\Users\\you\\Documents\\meeting.md', name: 'meeting.md', folder: false, size: 3_200, exists: true, addedAt: Date.now() - 5 * 60_000, icon: null, typeName: 'MD File' },
+  { id: 2, path: 'C:\\Users\\you\\Downloads\\Q3 roadmap.pdf', name: 'Q3 roadmap.pdf', folder: false, size: 2_400_000, exists: true, addedAt: Date.now() - 20 * 60_000, icon: null, typeName: 'PDF File' },
+  { id: 1, path: 'C:\\Users\\you\\Pictures\\whiteboard.jpg', name: 'whiteboard.jpg', folder: false, size: 840_000, exists: false, addedAt: Date.now() - 3 * 3_600_000, icon: null, typeName: 'JPG File' },
 ];
 
 function previewAdd(paths: string[]) {
   for (const path of paths) {
     previewItems = [
-      { id: previewId++, path, name: path.split(/[\\/]/).pop() ?? path, folder: false, size: 12_000, exists: true, addedAt: Date.now() },
+      { id: previewId++, path, name: path.split(/[\\/]/).pop() ?? path, folder: false, size: 12_000, exists: true, addedAt: Date.now(), icon: null, typeName: '' },
       ...previewItems.filter((i) => i.path !== path),
     ];
   }

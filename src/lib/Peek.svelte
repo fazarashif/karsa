@@ -5,7 +5,7 @@
   import Eyes from './Eyes.svelte';
   import Icon from './Icon.svelte';
   import { pasaran } from './jawa';
-  import { media } from './media.svelte';
+  import { media, positionAt, sourceLabel } from './media.svelte';
   import { mood } from './mood.svelte';
   import { nextToday, reminders } from './reminders.svelte';
   import { todo, upcomingTasks } from './todo.svelte';
@@ -18,6 +18,16 @@
   const playing = $derived(media.state);
   const top = $derived(upcomingTasks(todo.tasks).filter((t) => t.id !== next?.taskId).slice(0, 3));
   const timer = $derived(focus.state);
+
+  // The Playing row's progress line moves once a second while playing.
+  let now = $state(Date.now());
+  $effect(() => {
+    if (!playing.playing) return;
+    now = Date.now();
+    const t = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(t);
+  });
+  const progress = $derived(playing.durationMs > 0 ? positionAt(playing, now) / playing.durationMs : 0);
 
   // The small buttons act on the timer without opening the panel.
   function act(e: MouseEvent, action: () => void) {
@@ -35,7 +45,7 @@
   onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && onclick()}
 >
   <span class="head beat" style="--i: 0">
-    <span class="date"><Eyes expression={mood(clock.now)} width={24} glance />{formatDate(clock.now)}<span class="pasaran">{pasaran(clock.now)}</span></span>
+    <span class="date"><Eyes expression={mood(clock.now)} width={22} head="small" glance />{formatDate(clock.now)}<span class="pasaran">{pasaran(clock.now)}</span></span>
     <span class="muted num">{formatTime(clock.now)}</span>
   </span>
   <span class="sep beat" style="--i: 1"><Icon name="ornaments/kawung-mark" size={8} /></span>
@@ -75,21 +85,25 @@
   </span>
 
   {#if playing.active}
-    <span class="row beat media" style="--i: 4">
+    <!-- Clicking the row opens Now playing (Peek's own click then opens the panel). -->
+    <span class="row beat media" style="--i: 4" role="presentation" onclick={() => panel.showNowPlaying('pill')}>
       <span class="key">Playing</span>
-      <span class="value ell" title="{playing.title}{playing.artist ? ` · ${playing.artist}` : ''} ({playing.app})">
-        {playing.title}{#if playing.artist}<span class="muted"> · {playing.artist}</span>{/if}
+      <span class="value ell" title="{playing.title}{playing.artist ? ` · ${playing.artist}` : ''} ({sourceLabel(playing)})">
+        {#if playing.appIcon}<img class="source" src={playing.appIcon} alt="" />{/if}{playing.title}{#if playing.artist}<span class="muted"> · {playing.artist}</span>{/if}
       </span>
-      <button class="ibtn sm" aria-label="Previous" disabled={!playing.canPrevious} onclick={(e) => act(e, () => media.control('previous'))}>
+      <button class="ibtn sm" aria-label="Previous" disabled={!playing.canPrevious} onclick={(e) => act(e, () => media.control({ kind: 'previous' }))}>
         <Icon name="previous" size={12} />
       </button>
-      <button class="ibtn sm" aria-label={playing.playing ? 'Pause' : 'Play'} onclick={(e) => act(e, () => media.control('toggle'))}>
+      <button class="ibtn sm" aria-label={playing.playing ? 'Pause' : 'Play'} onclick={(e) => act(e, () => media.control({ kind: 'toggle' }))}>
         <Icon name={playing.playing ? 'pause' : 'play'} size={12} />
       </button>
-      <button class="ibtn sm" aria-label="Next" disabled={!playing.canNext} onclick={(e) => act(e, () => media.control('next'))}>
-        <Icon name="skip" size={12} />
+      <button class="ibtn sm" aria-label="Next" disabled={!playing.canNext} onclick={(e) => act(e, () => media.control({ kind: 'next' }))}>
+        <Icon name="next" size={12} />
       </button>
     </span>
+    {#if playing.durationMs > 0}
+      <span class="progress beat" style="--i: 4" aria-hidden="true"><i style:transform="scaleX({progress})"></i></span>
+    {/if}
   {/if}
 
   <span class="row beat" style="--i: {playing.active ? 5 : 4}">
@@ -123,9 +137,35 @@
     overflow: hidden;
   }
 
-  /* One row taller while something is playing (PEEK_MEDIA_ROW in config.ts). */
+  /* Taller while something is playing (PEEK_MEDIA_ROW in config.ts). */
   .peek.with-media {
-    height: calc(var(--peek-h) + 26px);
+    height: var(--peek-media-h);
+  }
+
+  /* The source app's icon before the title. */
+  .source {
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    border-radius: 3px;
+    vertical-align: -1px;
+  }
+
+  .progress {
+    position: relative;
+    display: block;
+    height: var(--pill-progress-h);
+    margin: 2px 0 6px 70px;
+    border-radius: 1px;
+    background: var(--track);
+    overflow: hidden;
+  }
+
+  .progress i {
+    position: absolute;
+    inset: 0;
+    background: var(--gading);
+    transform-origin: 0 0;
   }
 
   .head {

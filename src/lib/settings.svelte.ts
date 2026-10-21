@@ -29,6 +29,10 @@ export type AppSettings = {
   clipboardPaused: boolean;
   /** Show what is playing in the pill when nothing else needs it. */
   mediaInPill: boolean;
+  /** Look up lyrics on lrclib.net (off until turned on: Karsa's only network use). */
+  lyricsEnabled: boolean;
+  /** Show the current lyric line in the idle pill (needs lyrics). */
+  lyricFocus: boolean;
 };
 
 export type SettingsPatch = Partial<
@@ -47,6 +51,8 @@ export type SettingsPatch = Partial<
     | 'clipboardEnabled'
     | 'clipboardPaused'
     | 'mediaInPill'
+    | 'lyricsEnabled'
+    | 'lyricFocus'
   >
 >;
 
@@ -68,6 +74,8 @@ let current = $state<AppSettings>({
   clipboardEnabled: true,
   clipboardPaused: false,
   mediaInPill: true,
+  lyricsEnabled: false,
+  lyricFocus: false,
 });
 let error = $state<string | null>(null);
 

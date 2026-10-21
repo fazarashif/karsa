@@ -4,6 +4,7 @@
   import { formatTime } from '../format.svelte';
   import Icon from '../Icon.svelte';
   import Kain from './Kain.svelte';
+  import { withReaction } from '../mood.svelte';
 
   const s = $derived(focus.state);
   const of = $derived(s.settings.sessionsPerCycle);
@@ -18,7 +19,7 @@
   });
 
   const eyes: Expression = $derived(
-    s.status === 'ready' ? 'melek' : s.status === 'waiting' ? 'mesem' : s.phase === 'focus' ? 'fokus' : 'leren',
+    withReaction(s.status === 'ready' ? 'melek' : s.status === 'waiting' ? 'mesem' : s.phase === 'focus' ? 'fokus' : 'leren'),
   );
 
   const caption = $derived.by(() => {
@@ -56,7 +57,7 @@
 <div class="focus-tab">
   <div class="center">
     <span class="caps" style:color={label.color}>{label.text}</span>
-    <Eyes expression={eyes} width={56} />
+    <Eyes expression={eyes} width={56} head="large" />
     <span class="timer">{formatCountdown(focus.remainingMs)}</span>
     <span class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(focus.progress * 100)}>
       <i style:transform="scaleX({focus.progress})"></i>

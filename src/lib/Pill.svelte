@@ -8,6 +8,7 @@
     | { kind: 'due'; title: string; detail: string; color: string }
     | { kind: 'focus'; isBreak: boolean; time: string; minutesLeft: number; paused: boolean; waiting: boolean }
     | { kind: 'media'; title: string; artist: string; art: string }
+    | { kind: 'lyric'; line: string }
     | { kind: 'eyes'; expression: Expression };
 
   export const typeColor = (kind: AlertPayload['kind']) => `var(--${kind})`;
@@ -16,6 +17,8 @@
 <script lang="ts">
   import Eyes from './Eyes.svelte';
   import Icon from './Icon.svelte';
+  import { media, positionAt } from './media.svelte';
+  import { lyricIn, lyricOut } from './motion';
 
   let {
     content,
@@ -38,6 +41,16 @@
   });
   const eyesWidth = $derived(notch ? 24 : 28);
 
+  // The media pill's progress line moves once a second while playing.
+  let now = $state(Date.now());
+  $effect(() => {
+    if (content.kind !== 'media' || !media.state.playing) return;
+    now = Date.now();
+    const t = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(t);
+  });
+  const progress = $derived(media.state.durationMs > 0 ? positionAt(media.state, now) / media.state.durationMs : 0);
+
   const label = $derived.by(() => {
     switch (content.kind) {
       case 'alert':
@@ -50,6 +63,8 @@
         return `Karsa, ${content.isBreak ? 'break' : 'focus'}, ${content.minutesLeft} min left${content.paused ? ', paused' : ''}`;
       case 'media':
         return `Karsa, playing ${content.title}${content.artist ? ` by ${content.artist}` : ''}`;
+      case 'lyric':
+        return `Karsa, lyric: ${content.line}`;
       default:
         return 'Karsa, nothing due today';
     }
@@ -60,15 +75,16 @@
   class="pill beat"
   class:notch
   class:eyes-only={content.kind === 'eyes'}
-  class:with-eyes={content.kind === 'focus'}
+  class:with-eyes={content.kind === 'focus' || content.kind === 'lyric'}
+  class:lyric={content.kind === 'lyric'}
   bind:offsetWidth={width}
   {onclick}
   aria-label={label}
 >
   {#if content.kind === 'eyes'}
-    <Eyes expression={content.expression} width={eyesWidth} {blinkKey} glance />
+    <Eyes expression={content.expression} width={eyesWidth} head={notch ? 'small' : 'eyes'} {blinkKey} glance />
   {:else if content.kind === 'focus'}
-    <Eyes expression={content.waiting ? 'mesem' : content.isBreak ? 'leren' : 'fokus'} width={eyesWidth} />
+    <Eyes expression={content.waiting ? 'mesem' : content.isBreak ? 'leren' : 'fokus'} width={eyesWidth} head={notch ? 'small' : 'eyes'} />
     {#if content.waiting}
       <span class="label" style:color="var(--focus)">{content.isBreak ? 'Start break' : 'Start focus'}</span>
     {:else if content.isBreak}
@@ -84,6 +100,16 @@
       <span style:color="var(--accent)"><Icon name="music" size={14} /></span>
     {/if}
     <span class="label ell">{content.title}</span>
+    {#if media.state.durationMs > 0}
+      <span class="progress" aria-hidden="true"><i style:transform="scaleX({progress})"></i></span>
+    {/if}
+  {:else if content.kind === 'lyric'}
+    <Eyes expression="nyanyi" width={eyesWidth} head={notch ? 'small' : 'eyes'} />
+    <span class="lines">
+      {#key content.line}
+        <span class="label ell line" in:lyricIn out:lyricOut>{content.line}</span>
+      {/key}
+    </span>
   {:else if content.kind === 'alert'}
     <span class="gong" style:color={typeColor(content.alert.kind)} style:--gong-delay="90ms">
       <Icon name="ornaments/kawung-mark" size={10} />
@@ -141,6 +167,58 @@
 
   .detail {
     flex: none;
+  }
+
+  .pill {
+    position: relative;
+  }
+
+  /* A thin progress line along the bottom while music plays (design v2, 6.4). */
+  .progress {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 3px;
+    height: var(--pill-progress-h);
+    border-radius: 1px;
+    background: var(--track);
+    overflow: hidden;
+  }
+
+  .notch .progress {
+    bottom: 2px;
+  }
+
+  .progress i {
+    position: absolute;
+    inset: 0;
+    background: var(--gading);
+    transform-origin: 0 0;
+  }
+
+  /* Lyric focus: one line at a fixed width, so a new line never resizes the island. */
+  .pill.lyric {
+    width: var(--lyric-max-w);
+    max-width: none;
+  }
+
+  .pill.notch.lyric {
+    width: var(--lyric-max-w-notch);
+    max-width: none;
+  }
+
+  .lines {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 18px;
+  }
+
+  .line {
+    position: absolute;
+    inset: 0;
+    text-align: left;
+    line-height: 18px;
   }
 
   /* Album art, as a small rounded square. */

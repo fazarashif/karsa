@@ -14,8 +14,8 @@
       {
         "label": "island",
         "title": "Karsa",
-        "width": 400,
-        "height": 540,
+        "width": 560,
+        "height": 640,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,

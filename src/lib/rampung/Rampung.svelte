@@ -84,7 +84,7 @@
 <div class="view">
   {#if finished}
     <div class="closing">
-      <Eyes expression="bungah" width={56} />
+      <Eyes expression="bungah" width={56} head="large" />
       <span class="proverb">Rampung</span>
       <span class="muted">{proverb.text}</span>
       <span class="faint small">{proverb.meaning}</span>

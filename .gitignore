@@ -5,3 +5,7 @@ src-tauri/gen/schemas/
 *.log
 # Local Claude Code settings
 .claude/
+
+# Attachments bundled for Claude Design
+karsa-design-v2-context.zip
+design/*.zip

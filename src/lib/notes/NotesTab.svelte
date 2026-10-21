@@ -22,6 +22,12 @@
     if (view.kind === 'open') return onEscape(back);
   });
 
+  // An open note takes the tall editor shape.
+  $effect(() => {
+    panel.editing = view.kind === 'open';
+    return () => (panel.editing = false);
+  });
+
   // Requests from elsewhere: a task's "Open meeting note", or a meeting reminder's alert.
   $effect(() => {
     const request = panel.noteRequest;

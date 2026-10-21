@@ -4,7 +4,7 @@
   import { onEscape } from '../escape';
   import { formatTime } from '../format.svelte';
   import Icon from '../Icon.svelte';
-  import { formatSize, shelf, type ShelfItem } from '../shelf.svelte';
+  import { extensionOf, formatSize, shelf, type ShelfItem } from '../shelf.svelte';
 
   let copiedId = $state<number | null>(null);
   let menuOpen = $state(false);
@@ -53,6 +53,9 @@
     copiedId = item.id;
     setTimeout(() => copiedId === item.id && (copiedId = null), 1200);
   }
+
+  /** Up to five letters fit on the page; "PARQUET" becomes "PARQ…". */
+  const badge = (extension: string) => (extension.length > 5 ? `${extension.slice(0, 4)}…` : extension);
 
   // Dragging a row hands the file to Windows' own drag, so it can be dropped in any app.
   function dragStart(e: DragEvent, item: ShelfItem) {
@@ -106,9 +109,17 @@
           draggable={item.exists}
           ondragstart={(e) => dragStart(e, item)}
           onclick={() => item.exists && shelf.open(item.id)}
-          title={item.path}
+          title={item.typeName ? `${item.typeName}\n${item.path}` : item.path}
         >
-          <span class="kind"><Icon name={item.folder ? 'folder' : 'file'} size={16} /></span>
+          <span class="kind">
+            {#if item.icon}
+              <img src={item.icon} alt="" width="32" height="32" />
+            {:else if !item.folder && extensionOf(item.name)}
+              <span class="ext" style:font-size="{[9, 9, 9, 9, 8][extensionOf(item.name).length] ?? 7}px">{badge(extensionOf(item.name))}</span>
+            {:else}
+              <Icon name={item.folder ? 'folder' : 'file'} size={20} />
+            {/if}
+          </span>
           <span class="text">
             <span class="name ell">{item.name}</span>
             <span class="meta">
@@ -192,8 +203,31 @@
     background: var(--surface);
   }
 
+  /* The icon Explorer shows for the file, at the size Explorer's tiles use. */
   .kind {
     flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    color: var(--muted);
+  }
+
+  .kind img {
+    display: block;
+  }
+
+  /* A type Windows does not know: its extension on a small page. */
+  .ext {
+    box-sizing: border-box;
+    display: grid;
+    place-items: end center;
+    width: 26px;
+    height: 32px;
+    padding-bottom: 5px;
+    border: 1.5px solid var(--hairline-strong);
+    border-radius: 4px 9px 4px 4px;
+    font: var(--fw-semibold) 9px/1 var(--font-text);
     color: var(--muted);
   }
 

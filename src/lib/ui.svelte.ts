@@ -1,4 +1,6 @@
-export type Tab = 'todo' | 'focus' | 'notes' | 'reminders' | 'shelf' | 'settings';
+import type { View } from './config';
+
+export type Tab = 'todo' | 'focus' | 'notes' | 'reminders' | 'calendar' | 'shelf' | 'settings';
 
 export type NoteRequest = { path: string } | { meeting: { title: string; at: number } };
 
@@ -19,8 +21,50 @@ let rampung = $state(false);
 let capture = $state(false);
 /** Which half of the Shelf tab is showing. */
 let shelf = $state<'clipboard' | 'files'>('clipboard');
+/** A note is open in the Notes tab, which needs the tall editor shape. */
+let editing = $state(false);
+/** Now playing covers the panel (opened from the media pill or Peek's Playing row). */
+let nowPlaying = $state(false);
+/** Now playing shows its lyrics area; kept while the app runs. */
+let lyricsOpen = $state(false);
+/** Opened from the panel's header (back goes to the tabs) or from the pill or Peek. */
+let nowPlayingFrom = $state<'panel' | 'pill'>('pill');
 
 export const panel = {
+  /** What the panel shows, which decides the island's shape. */
+  get view(): View {
+    if (nowPlaying) return lyricsOpen ? 'nowplaying-lyrics' : 'nowplaying';
+    if (capture) return 'capture';
+    if (rampung) return 'rampung';
+    if (tab === 'notes' && editing) return 'editor';
+    return tab;
+  },
+  get nowPlaying() {
+    return nowPlaying;
+  },
+  set nowPlaying(value: boolean) {
+    nowPlaying = value;
+  },
+  get nowPlayingFrom() {
+    return nowPlayingFrom;
+  },
+  /** Opens Now playing over the panel. */
+  showNowPlaying(from: 'panel' | 'pill') {
+    nowPlayingFrom = from;
+    nowPlaying = true;
+  },
+  get lyricsOpen() {
+    return lyricsOpen;
+  },
+  set lyricsOpen(value: boolean) {
+    lyricsOpen = value;
+  },
+  get editing() {
+    return editing;
+  },
+  set editing(value: boolean) {
+    editing = value;
+  },
   get tab() {
     return tab;
   },

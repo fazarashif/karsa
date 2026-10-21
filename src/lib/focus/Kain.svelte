@@ -2,7 +2,7 @@
      with more focus minutes, Monday to Sunday, plus the current streak. -->
 <script lang="ts">
   import { clock } from '../clock.svelte';
-  import { focus } from '../focus.svelte';
+  import { focus, streakDays } from '../focus.svelte';
   import { formatDate, toDateInput } from '../format.svelte';
   import Icon from '../Icon.svelte';
 
@@ -33,19 +33,7 @@
     });
   });
 
-  // Days in a row with focus, counted back from today (or from yesterday while today has
-  // nothing yet, so the streak is not broken before the day is over).
-  const streak = $derived.by(() => {
-    const day = new Date(clock.now);
-    day.setHours(0, 0, 0, 0);
-    if (!minutesByDay.has(toDateInput(day.getTime()))) day.setDate(day.getDate() - 1);
-    let count = 0;
-    while (minutesByDay.has(toDateInput(day.getTime()))) {
-      count++;
-      day.setDate(day.getDate() - 1);
-    }
-    return count;
-  });
+  const streak = $derived(streakDays(focus.history, clock.now));
 
   const label = (c: (typeof cells)[number]) =>
     `${formatDate(c.day)} · ${c.minutes ? `${c.minutes} min of focus` : 'no focus'}`;

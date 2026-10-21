@@ -8,7 +8,7 @@ export type Box = { width: number; height: number; radius: number };
  * everything outside the box click-through. Must match `WINDOW_SIZE` in
  * src-tauri/src/island.rs and the window in tauri.conf.json.
  */
-export const WINDOW = { width: 400, height: 540 } as const;
+export const WINDOW = { width: 560, height: 640 } as const;
 
 /** Idle pill. Its width follows the label, clamped by CSS min/max width. */
 export const PILL = { height: 32, radius: 16 } as const;
@@ -26,8 +26,41 @@ export const BOX: Record<Exclude<Mode, 'idle'>, Box> = {
   drop: { width: 320, height: 112, radius: 22 },
 };
 
-/** Peek grows by one row while something is playing (the "Playing" row). */
-export const PEEK_MEDIA_ROW = 26;
+/** Peek grows by the Playing row and its progress line while something plays (210 high). */
+export const PEEK_MEDIA_ROW = 38;
+
+/** What the open panel shows; each has its own shape (design v2, section 3). */
+export type View =
+  | 'todo'
+  | 'notes'
+  | 'editor'
+  | 'focus'
+  | 'reminders'
+  | 'calendar'
+  | 'shelf'
+  | 'settings'
+  | 'rampung'
+  | 'capture'
+  | 'nowplaying'
+  | 'nowplaying-lyrics';
+
+/** The open island's shape per view. Every one uses the panel radius. Must match the
+    shape tokens in design/tokens.css. */
+export const SHAPE: Record<View, { width: number; height: number }> = {
+  todo: { width: 380, height: 520 },
+  notes: { width: 380, height: 520 },
+  editor: { width: 420, height: 620 },
+  focus: { width: 380, height: 500 },
+  reminders: { width: 380, height: 520 },
+  calendar: { width: 400, height: 600 },
+  shelf: { width: 400, height: 520 },
+  settings: { width: 400, height: 560 },
+  rampung: { width: 380, height: 480 },
+  // Quick capture becomes a 360 × 140 card in M9; until then it shares the panel.
+  capture: { width: 380, height: 520 },
+  nowplaying: { width: 520, height: 212 },
+  'nowplaying-lyrics': { width: 520, height: 420 },
+};
 
 export const TIMING = {
   /** How long a shrinking morph keeps its old clickable area; the spring is ~95% done by then. */
