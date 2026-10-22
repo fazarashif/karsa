@@ -10,6 +10,7 @@ mod localtime;
 mod lyrics;
 mod media;
 mod notes;
+mod outlook;
 mod reminders;
 mod settings;
 mod shelf;
@@ -25,9 +26,10 @@ use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 pub const ISLAND: &str = "island";
 
 #[tauri::command]
-fn ui_ready(engine: tauri::State<'_, Arc<reminders::ReminderEngine>>) {
+fn ui_ready(engine: tauri::State<'_, Arc<reminders::ReminderEngine>>, outlook: tauri::State<'_, Arc<outlook::Outlook>>) {
     island::ui_ready();
     engine.start();
+    outlook.poke(false);
 }
 
 #[tauri::command]
@@ -158,6 +160,8 @@ fn main() {
             media::media_control,
             lyrics::lyrics_get,
             lyrics::lyrics_offset,
+            outlook::outlook_state,
+            outlook::outlook_refresh,
         ])
         .on_window_event(|_window, event| {
             if let WindowEvent::ScaleFactorChanged { .. } = event {
@@ -186,6 +190,9 @@ fn main() {
             let reminder_engine = Arc::new(reminders::ReminderEngine::new());
             app.manage(reminder_engine.clone());
             reminders::spawn(app.handle().clone(), reminder_engine)?;
+            let outlook = Arc::new(outlook::Outlook::new());
+            app.manage(outlook.clone());
+            outlook::spawn(app.handle().clone(), outlook)?;
 
             let window = app
                 .get_webview_window(ISLAND)

@@ -8,6 +8,7 @@
   import { formatTime, prefs, toDateInput } from './lib/format.svelte';
   import { contentOut } from './lib/motion';
   import { lyrics } from './lib/lyrics.svelte';
+  import { asUpcoming, noteFrom, outlook } from './lib/outlook.svelte';
   import { media, previewMedia } from './lib/media.svelte';
   import { idleMood } from './lib/mood.svelte';
   import { pointer } from './lib/pointer.svelte';
@@ -40,7 +41,7 @@
     // Only a waiting alert takes the pill; a new one first shows kaget eyes for a moment.
     if (alert && alertHeld) return { kind: 'alert', alert };
     const now = clock.now;
-    const next = nextToday(reminders.all, now);
+    const next = nextToday([...reminders.all, ...asUpcoming(outlook.meetings)], now);
     const minutes = next ? Math.ceil((next.at - now.getTime()) / 60_000) : Infinity;
     const color = next ? `var(--${next.kind})` : '';
     if (next && minutes <= 15) {
@@ -233,12 +234,14 @@
     void expand();
   }
 
-  /** "+ Meeting note" on a meeting alert: a new note titled after the meeting, at its time. */
+  /** "+ Meeting note" on a meeting alert: a new note titled after the meeting, at its time;
+      for an Outlook meeting, with its people too (or the note it already has). */
   function meetingNoteAlert() {
     const meeting = alert;
     dismissAlert();
     if (!meeting) return;
-    panel.startMeeting(meeting.title, meeting.at ?? Date.now());
+    const fromOutlook = meeting.outlook ? outlook.find(meeting.outlook) : undefined;
+    panel.startMeeting(fromOutlook ? noteFrom(fromOutlook) : { title: meeting.title, at: meeting.at ?? Date.now() });
     void expand();
   }
 
@@ -489,6 +492,7 @@
     reminders.load();
     settings.load();
     media.load();
+    void outlook.load();
     if (!inTauri) installPreviewHelpers();
     // Wait for the first painted frame before the core shows the window.
     requestAnimationFrame(() => requestAnimationFrame(() => core.ready()));

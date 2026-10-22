@@ -1,8 +1,9 @@
 import type { View } from './config';
+import type { NewMeeting } from './meeting';
 
 export type Tab = 'todo' | 'focus' | 'notes' | 'reminders' | 'calendar' | 'shelf' | 'settings';
 
-export type NoteRequest = { path: string } | { meeting: { title: string; at: number } };
+export type NoteRequest = { path: string } | { meeting: NewMeeting };
 
 /** The panel's tab. Kept here so it survives closing the panel, and so the pill and
     Peek can open the panel on a specific tab (e.g. Focus while a timer runs). */
@@ -93,9 +94,10 @@ export const panel = {
     noteRequest = { path };
     tab = 'notes';
   },
-  /** Switches to the Notes tab with a new meeting note, e.g. from a meeting reminder. */
-  startMeeting(title: string, at: number) {
-    noteRequest = { meeting: { title, at } };
+  /** Switches to the Notes tab with a new meeting note, e.g. from a meeting reminder; an
+      Outlook meeting that already has one opens it. */
+  startMeeting(meeting: NewMeeting) {
+    noteRequest = { meeting };
     tab = 'notes';
   },
   get rampung() {

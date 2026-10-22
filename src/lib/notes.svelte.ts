@@ -13,6 +13,8 @@ export type NoteSummary = {
   date: number;
   openActions: number;
   doneActions: number;
+  /** The Outlook meeting a meeting note was started from, or "". */
+  outlook: string;
 };
 
 export type NoteFile = { path: string; content: string; modified: number };
@@ -49,6 +51,12 @@ export const notes = {
     if (inTauri) await invoke('notes_delete', { path });
     else previewFiles.delete(path);
     await refresh();
+  },
+  /** The meeting note started from an Outlook meeting, looked for in all notes (the list
+      may be filtered by a search). */
+  findOutlook: async (key: string) => {
+    const all = inTauri ? await invoke<NoteSummary[]>('notes_list', { query: null }) : previewList(true);
+    return all.find((n) => n.kind === 'meeting' && n.outlook === key) ?? null;
   },
   reveal: (path: string) => (inTauri ? invoke('notes_reveal', { path }) : Promise.resolve()),
   openWindow: (path: string, title: string) => (inTauri ? invoke('notes_open_window', { path, title }) : Promise.resolve()),
@@ -135,8 +143,8 @@ export class NoteSession {
 
 const previewFiles = new Map<string, NoteFile>();
 
-function previewList(): NoteSummary[] {
-  const q = query.trim().toLowerCase();
+function previewList(all = false): NoteSummary[] {
+  const q = all ? '' : query.trim().toLowerCase();
   return [...previewFiles.values()]
     .filter((f) => !q || f.content.toLowerCase().includes(q))
     .map((f) => {
@@ -152,6 +160,7 @@ function previewList(): NoteSummary[] {
         date: f.modified,
         openActions: m?.actions.filter((a) => !a.done).length ?? 0,
         doneActions: m?.actions.filter((a) => a.done).length ?? 0,
+        outlook: m?.outlook ?? '',
       };
     })
     .sort((a, b) => b.date - a.date);

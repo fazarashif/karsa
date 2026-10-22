@@ -44,6 +44,8 @@ const MARGIN: f64 = 12.0;
 /// Extra room on the open sides of the box (above and left in the corner, below and on
 /// both sides as a notch) so the spring overshoot is not clipped.
 const REGION_PADDING: f64 = 10.0;
+/// The notch's padding also holds its shadow (`--shadow-notch` reaches 17 px).
+const NOTCH_PADDING: f64 = 18.0;
 
 /// Where the island sits.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -178,11 +180,12 @@ fn apply_region() {
     if p.width == 0 {
         return;
     }
-    let padding = REGION_PADDING * p.scale;
+    let at_top = AT_TOP.load(Ordering::Relaxed);
+    let padding = if at_top { NOTCH_PADDING } else { REGION_PADDING } * p.scale;
     let (w, h) = (width * p.scale, height * p.scale);
     let (left, top, right, bottom) = if width <= 0.0 || height <= 0.0 {
         (0, 0, 0, 0) // empty until the UI reports its size
-    } else if AT_TOP.load(Ordering::Relaxed) {
+    } else if at_top {
         let middle = f64::from(p.width) / 2.0;
         (
             ((middle - w / 2.0 - padding).floor() as i32).max(0),

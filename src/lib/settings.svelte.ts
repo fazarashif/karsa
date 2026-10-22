@@ -33,6 +33,10 @@ export type AppSettings = {
   lyricsEnabled: boolean;
   /** Show the current lyric line in the idle pill (needs lyrics). */
   lyricFocus: boolean;
+  /** Read meetings from classic Outlook on this PC (off until turned on). */
+  outlookEnabled: boolean;
+  /** Minutes before an Outlook meeting that Karsa alerts; -1 for no alerts. */
+  outlookLeadMin: number;
 };
 
 export type SettingsPatch = Partial<
@@ -53,6 +57,8 @@ export type SettingsPatch = Partial<
     | 'mediaInPill'
     | 'lyricsEnabled'
     | 'lyricFocus'
+    | 'outlookEnabled'
+    | 'outlookLeadMin'
   >
 >;
 
@@ -76,6 +82,8 @@ let current = $state<AppSettings>({
   mediaInPill: true,
   lyricsEnabled: false,
   lyricFocus: false,
+  outlookEnabled: false,
+  outlookLeadMin: 10,
 });
 let error = $state<string | null>(null);
 

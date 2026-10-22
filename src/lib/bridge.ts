@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { FocusState } from './focus.svelte';
 import type { MediaState } from './media.svelte';
+import type { OutlookState } from './outlook.svelte';
 import type { Reminder } from './reminders.svelte';
 import type { AppSettings } from './settings.svelte';
 import type { Snapshot } from './todo.svelte';
@@ -18,6 +19,8 @@ export type AlertPayload = {
   /** Reminder alerts: the reminder to snooze, and its event time. */
   reminder?: number;
   at?: number;
+  /** Outlook meeting alerts: the meeting, for its note. */
+  outlook?: string;
   /** Several reminders at once (or missed ones): offers Review instead of Snooze. */
   summary?: boolean;
   /** The end-of-day invitation: offers Later and Start. */
@@ -37,6 +40,7 @@ type Events = {
   /** Files dragged over the island (the core's own drop target); on drop they are already kept. */
   'shelf://drag': { kind: 'enter' | 'leave' | 'drop'; count: number; kept: number };
   'media://changed': MediaState;
+  'outlook://changed': OutlookState;
   'island://fullscreen': boolean;
   'focus://state': FocusState;
   'reminders://changed': Reminder[];

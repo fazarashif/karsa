@@ -1,9 +1,11 @@
 /**
- * The calendar's view of Karsa's own data (design v2, 4.5 and 6.3): which days carry
- * deadlines, meetings and reminders, how long you focused, and each day's agenda.
- * Pure functions over the stores' data; nothing is fetched or kept.
+ * The calendar's view of Karsa's own data (design v2, 4.5 and 6.3), and of Outlook's
+ * meetings when it is connected: which days carry deadlines, meetings and reminders, how
+ * long you focused, and each day's agenda. Pure functions over the stores' data; nothing
+ * is fetched or kept.
  */
 import type { NoteSummary } from './notes.svelte';
+import type { OutlookMeeting } from './outlook.svelte';
 import type { Reminder } from './reminders.svelte';
 import type { Task } from './todo.svelte';
 
@@ -57,7 +59,12 @@ function timeOn(r: Reminder, day: Date) {
   return d.getTime();
 }
 
-export type Data = { tasks: Task[]; reminders: Reminder[]; notes: NoteSummary[]; focus: [number, number][] };
+export type Data = { tasks: Task[]; reminders: Reminder[]; notes: NoteSummary[]; focus: [number, number][]; meetings: OutlookMeeting[] };
+
+/** Whether an Outlook meeting is on the day: by its start, or across its days if all day. */
+function onDay(m: OutlookMeeting, start: number, end: number) {
+  return m.allDay ? m.start < end && m.end > start : m.start >= start && m.start < end;
+}
 
 /** Reminders a task already stands for (its linked deadline) are left to the task. */
 const ownReminders = (data: Data) => data.reminders.filter((r) => r.taskId === null);
@@ -78,6 +85,12 @@ export function marks(days: Date[], data: Data) {
   for (const n of data.notes) {
     const m = n.kind === 'meeting' ? mark(n.date) : undefined;
     if (m) m.meeting = true;
+  }
+  for (const meeting of data.meetings) {
+    if (meeting.canceled || meeting.declined) continue;
+    for (const day of days) {
+      if (onDay(meeting, day.getTime(), addDays(day, 1).getTime())) map.get(day.getTime())!.meeting = true;
+    }
   }
   for (const r of ownReminders(data)) {
     // Every-N-minutes nudges would put a dot on every weekday; they stay in the agenda.
@@ -101,6 +114,7 @@ export type AgendaItem =
   | { kind: 'late'; task: Task }
   | { kind: 'task'; task: Task; at: number | null }
   | { kind: 'reminder'; reminder: Reminder; at: number; note: NoteSummary | null }
+  | { kind: 'outlook'; meeting: OutlookMeeting; note: NoteSummary | null }
   | { kind: 'note'; note: NoteSummary }
   | { kind: 'interval'; reminder: Reminder };
 
@@ -116,18 +130,27 @@ export function agenda(day: Date, today: Date, data: Data) {
     }
   }
   const timed: { at: number; item: AgendaItem }[] = [];
+  const untimed: AgendaItem[] = [];
   const meetings = data.notes.filter((n) => n.kind === 'meeting' && n.date >= start && n.date < end);
   const usedNotes = new Set<string>();
+  // Outlook meetings, each with the note started from it.
+  for (const m of data.meetings) {
+    if (!onDay(m, start, end)) continue;
+    const note = data.notes.find((n) => n.kind === 'meeting' && n.outlook === m.key) ?? null;
+    if (note) usedNotes.add(note.path);
+    const item: AgendaItem = { kind: 'outlook', meeting: m, note };
+    if (m.allDay) untimed.push(item);
+    else timed.push({ at: m.start, item });
+  }
   for (const r of ownReminders(data)) {
     if (!repeatsOn(r, day)) continue;
     if (r.repeat === 'interval') continue;
     const at = timeOn(r, day);
-    const note = r.kind === 'meeting' ? (meetings.find((n) => n.title === r.title) ?? null) : null;
+    const note = r.kind === 'meeting' ? (meetings.find((n) => n.title === r.title && !usedNotes.has(n.path)) ?? null) : null;
     if (note) usedNotes.add(note.path);
     timed.push({ at, item: { kind: 'reminder', reminder: r, at, note } });
   }
   for (const n of meetings) if (!usedNotes.has(n.path)) timed.push({ at: n.date, item: { kind: 'note', note: n } });
-  const untimed: AgendaItem[] = [];
   for (const t of data.tasks) {
     if (t.parentId !== null || t.dueAt === null || t.dueAt < start || t.dueAt >= end) continue;
     if (t.dueHasTime) timed.push({ at: t.dueAt, item: { kind: 'task', task: t, at: t.dueAt } });

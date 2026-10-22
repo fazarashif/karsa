@@ -281,6 +281,11 @@ impl ReminderEngine {
         self.ready.store(true, Ordering::Relaxed);
         self.poke();
     }
+
+    /// Whether the UI can show alerts yet (Outlook meeting alerts wait for it too).
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Relaxed)
+    }
 }
 
 fn next_fire(app: &AppHandle) -> Option<i64> {

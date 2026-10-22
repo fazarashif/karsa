@@ -4,6 +4,7 @@
   import { formatTime, fromInputs, toDateInput } from '../format.svelte';
   import Icon from '../Icon.svelte';
   import { parseDate, weton } from '../jawa';
+  import { outlook } from '../outlook.svelte';
   import PickerField from '../PickerField.svelte';
   import { settings } from '../settings.svelte';
   import Stepper from './Stepper.svelte';
@@ -21,6 +22,30 @@
     { label: 'Bottom right', value: 'corner' },
     { label: 'Top', value: 'top' },
   ] as const;
+
+  const meetingLeads = [
+    { label: 'Off', minutes: -1 },
+    { label: '5m', minutes: 5 },
+    { label: '10m', minutes: 10 },
+    { label: '15m', minutes: 15 },
+    { label: '30m', minutes: 30 },
+    { label: '1h', minutes: 60 },
+    { label: '2h', minutes: 120 },
+  ];
+
+  /** How Outlook is doing, under its switch. */
+  const outlookStatus = $derived.by(() => {
+    const o = outlook.state;
+    if (o.status === 'reading' || (o.status === 'off' && s.outlookEnabled)) return 'Reading Outlook…';
+    if (o.status === 'ok') {
+      const n = o.meetings.filter((m) => !m.canceled).length;
+      return `Connected · ${n} ${n === 1 ? 'meeting' : 'meetings'} from last month to next month · read at ${formatTime(o.readAt)}`;
+    }
+    if (o.status === 'closed') {
+      return o.readAt ? `Outlook is closed. Karsa keeps what it read at ${formatTime(o.readAt)}.` : 'Outlook is closed. Open it and Karsa reads your calendar.';
+    }
+    return o.message;
+  });
 
   const leads = [
     { label: 'At time', minutes: 0 },
@@ -197,6 +222,33 @@
     </section>
 
     <section>
+      <h3 class="caps">Outlook</h3>
+      <div class="row">
+        <span class="grow">
+          <span class="label">Outlook meetings</span>
+          <span class="hint">Shows your meetings from Outlook on this PC in the calendar and Peek, ready for a meeting note. Karsa only reads them while Outlook is open, and nothing leaves your PC.</span>
+          {#if s.outlookEnabled}<span class="hint status">{outlookStatus}</span>{/if}
+        </span>
+        <Switch checked={s.outlookEnabled} label="Outlook meetings" onchange={(v) => settings.update({ outlookEnabled: v })} />
+      </div>
+      <div class="block" class:off={!s.outlookEnabled}>
+        <span class="label">Remind me before a meeting</span>
+        <div class="chips wrap" role="radiogroup" aria-label="Meeting lead time">
+          {#each meetingLeads as lead (lead.minutes)}
+            <button
+              class="chip"
+              class:on={s.outlookLeadMin === lead.minutes}
+              role="radio"
+              aria-checked={s.outlookLeadMin === lead.minutes}
+              disabled={!s.outlookEnabled}
+              onclick={() => settings.update({ outlookLeadMin: lead.minutes })}>{lead.label}</button
+            >
+          {/each}
+        </div>
+      </div>
+    </section>
+
+    <section>
       <h3 class="caps">Quick capture</h3>
       <div class="row">
         <span class="grow">
@@ -359,6 +411,18 @@
   .chips {
     display: flex;
     gap: 6px;
+  }
+
+  .chips.wrap {
+    flex-wrap: wrap;
+  }
+
+  .block.off {
+    opacity: var(--o-disabled);
+  }
+
+  .hint.status {
+    color: var(--muted);
   }
 
   .path {

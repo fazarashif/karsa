@@ -7,13 +7,14 @@
   import { pasaran } from './jawa';
   import { media, positionAt, sourceLabel } from './media.svelte';
   import { mood } from './mood.svelte';
+  import { asUpcoming, outlook } from './outlook.svelte';
   import { nextToday, reminders } from './reminders.svelte';
   import { todo, upcomingTasks } from './todo.svelte';
   import { panel } from './ui.svelte';
 
   let { onclick }: { onclick: () => void } = $props();
 
-  const next = $derived(nextToday(reminders.all, clock.now));
+  const next = $derived(nextToday([...reminders.all, ...asUpcoming(outlook.meetings)], clock.now));
   // A task whose deadline is the next-up item already has its own row.
   const playing = $derived(media.state);
   const top = $derived(upcomingTasks(todo.tasks).filter((t) => t.id !== next?.taskId).slice(0, 3));

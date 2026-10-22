@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onEscape } from '../escape';
-  import { newMeeting } from '../meeting';
+  import { newMeeting, type NewMeeting } from '../meeting';
   import { notes } from '../notes.svelte';
   import { panel } from '../ui.svelte';
   import NotesList from './NotesList.svelte';
@@ -34,13 +34,16 @@
     if (!request) return;
     panel.noteRequest = null;
     if ('path' in request) open(request.path);
-    else void createMeeting(request.meeting.title, request.meeting.at);
+    else void createMeeting(request.meeting);
   });
 
-  /** A meeting note is saved right away, so it exists even before anything is typed. */
-  async function createMeeting(title: string, at: number) {
+  /** A meeting note is saved right away, so it exists even before anything is typed. An
+      Outlook meeting that already has a note opens that note instead. */
+  async function createMeeting(meeting: NewMeeting) {
     try {
-      const saved = await notes.save(null, newMeeting(title, at), null);
+      const existing = meeting.outlook ? await notes.findOutlook(meeting.outlook) : null;
+      if (existing) return open(existing.path);
+      const saved = await notes.save(null, newMeeting(meeting), null);
       open(saved.path);
     } catch (e) {
       error = String(e);
@@ -57,6 +60,6 @@
     {error}
     onopen={open}
     onnewnote={() => open(null)}
-    onnewmeeting={() => createMeeting('Meeting', Date.now())}
+    onnewmeeting={() => createMeeting({ title: 'Meeting', at: Date.now() })}
   />
 {/if}

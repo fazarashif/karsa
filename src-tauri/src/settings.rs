@@ -10,7 +10,7 @@ use tauri_plugin_autostart::ManagerExt;
 
 use crate::db::Db;
 use crate::notes::{self, NotesFolder};
-use crate::{clipboard, hooks, island, lyrics, reminders, tray};
+use crate::{clipboard, hooks, island, lyrics, outlook, reminders, tray};
 
 const HIDE_IN_FULLSCREEN: &str = "island.hide_in_fullscreen";
 const POSITION: &str = "island.position";
@@ -57,6 +57,10 @@ pub struct AppSettings {
     lyrics_enabled: bool,
     /// Show the current lyric line in the idle pill (needs lyrics).
     lyric_focus: bool,
+    /// Read meetings from classic Outlook on this PC (off until turned on).
+    outlook_enabled: bool,
+    /// Minutes before an Outlook meeting that Karsa alerts; -1 for no alerts.
+    outlook_lead_min: i64,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +81,8 @@ pub struct Patch {
     media_in_pill: Option<bool>,
     lyrics_enabled: Option<bool>,
     lyric_focus: Option<bool>,
+    outlook_enabled: Option<bool>,
+    outlook_lead_min: Option<i64>,
 }
 
 /// The quick-capture hotkey, Win+Shift+K unless changed; empty when turned off.
@@ -167,6 +173,8 @@ fn current(app: &AppHandle) -> AppSettings {
         media_in_pill: db.setting(MEDIA_IN_PILL).as_deref() != Some("false"),
         lyrics_enabled: lyrics::enabled(&db),
         lyric_focus: db.setting(lyrics::FOCUS).as_deref() == Some("true"),
+        outlook_enabled: outlook::enabled(&db),
+        outlook_lead_min: outlook::lead_min(&db),
     }
 }
 
@@ -262,6 +270,16 @@ pub fn settings_update(app: AppHandle, db: State<'_, Db>, patch: Patch) -> Resul
     }
     if let Some(on) = patch.lyric_focus {
         put(&db, lyrics::FOCUS, Some(if on { "true" } else { "false" }))?;
+    }
+    if patch.outlook_enabled.is_some() || patch.outlook_lead_min.is_some() {
+        if let Some(on) = patch.outlook_enabled {
+            put(&db, outlook::ENABLED, Some(if on { "true" } else { "false" }))?;
+        }
+        if let Some(lead) = patch.outlook_lead_min {
+            put(&db, outlook::LEAD, Some(&lead.clamp(-1, 24 * 60).to_string()))?;
+        }
+        // Turning it on reads Outlook at once; a new lead time only reschedules the alerts.
+        app.state::<std::sync::Arc<outlook::Outlook>>().poke(patch.outlook_enabled == Some(true));
     }
     Ok(changed(&app))
 }

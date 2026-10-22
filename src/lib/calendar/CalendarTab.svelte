@@ -2,7 +2,7 @@
      day's agenda with quick add. Monday first, as in the kain. -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { addDays, agenda, daySummary, marks, monthGrid, sameDay, startOfDay, type Data } from '../calendar';
+  import { addDays, agenda, daySummary, marks, monthGrid, sameDay, startOfDay, type AgendaItem, type Data } from '../calendar';
   import { clock } from '../clock.svelte';
   import Eyes from '../Eyes.svelte';
   import { focus } from '../focus.svelte';
@@ -11,6 +11,7 @@
   import { paribasan, specialDay } from '../jawa';
   import { monthIn } from '../motion';
   import { notes } from '../notes.svelte';
+  import { noteFrom, outlook, type OutlookMeeting } from '../outlook.svelte';
   import { intervalLabel, reminders } from '../reminders.svelte';
   import { settings } from '../settings.svelte';
   import Checkbox from '../todo/Checkbox.svelte';
@@ -23,7 +24,7 @@
   /** Direction of the last month change, for the slide. */
   let dir = $state(1);
 
-  const data: Data = $derived({ tasks: todo.tasks, reminders: reminders.all, notes: notes.list, focus: focus.history });
+  const data: Data = $derived({ tasks: todo.tasks, reminders: reminders.all, notes: notes.list, focus: focus.history, meetings: outlook.meetings });
   const days = $derived(monthGrid(month));
   const dayMarks = $derived(marks(days, data));
   const items = $derived(agenda(selected, today, data));
@@ -37,6 +38,25 @@
   );
   const proverb = $derived(paribasan(clock.now));
   const dayLabel = (d: Date) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(d);
+
+  const itemKey = (item: AgendaItem) =>
+    item.kind === 'outlook'
+      ? `outlook-${item.meeting.key}`
+      : item.kind + ('task' in item ? item.task.id : 'reminder' in item ? item.reminder.id : item.note.path);
+
+  /** An Outlook meeting's time, place and organizer, for its tooltip. */
+  function meetingDetail(m: OutlookMeeting) {
+    const when = m.allDay ? 'All day' : `${formatTime(m.start)}–${formatTime(m.end)}`;
+    return [when, m.location, m.organizer].filter(Boolean).join(' · ');
+  }
+
+  /** Under the agenda while Outlook cannot be read. */
+  const outlookNote = $derived.by(() => {
+    const s = outlook.state;
+    if (!s.enabled || s.status === 'ok' || s.status === 'reading') return '';
+    if (s.status === 'error') return s.message;
+    return s.readAt ? `Outlook is closed. These are the meetings Karsa read at ${formatTime(s.readAt)}.` : 'Open Outlook to see your meetings here.';
+  });
 
   function showMonth(next: Date, direction: number) {
     dir = direction;
@@ -116,6 +136,7 @@
   onMount(() => {
     void notes.refresh();
     void reminders.load();
+    outlook.refresh();
   });
 </script>
 
@@ -218,7 +239,7 @@
       </div>
     {:else}
       <div class="scroll rows">
-        {#each items as item (item.kind + ('task' in item ? item.task.id : 'reminder' in item ? item.reminder.id : item.note.path))}
+        {#each items as item (itemKey(item))}
           {#if item.kind === 'late'}
             <div class="row">
               <span class="when late caps">Late</span>
@@ -256,6 +277,18 @@
                 <button class="btn text sm" onclick={() => panel.showNote(item.note!.path)}>Note · {item.note.openActions} open</button>
               {/if}
             </div>
+          {:else if item.kind === 'outlook'}
+            {@const m = item.meeting}
+            <div class="row" class:canceled={m.canceled} class:declined={m.declined}>
+              <span class="when num" style:color="var(--meeting)">{m.allDay ? 'All day' : formatTime(m.start)}</span>
+              <span class="what ell" title={meetingDetail(m)}>{m.title || 'Meeting'}</span>
+              {#if m.canceled}<span class="state faint">Canceled</span>{:else if m.declined}<span class="state faint">Declined</span>{/if}
+              {#if item.note}
+                <button class="btn text sm" onclick={() => panel.showNote(item.note!.path)}>Note · {item.note.openActions} open</button>
+              {:else if !m.canceled}
+                <button class="btn text sm" title="A meeting note with its title, time and people" onclick={() => panel.startMeeting(noteFrom(m))}>+ Note</button>
+              {/if}
+            </div>
           {:else if item.kind === 'note'}
             <div class="row">
               <span class="when num" style:color="var(--meeting)">{formatTime(item.note.date)}</span>
@@ -271,6 +304,7 @@
         {:else}
           {#if !adding}<p class="nothing muted">Nothing on {formatDate(selected)}</p>{/if}
         {/each}
+        {#if outlookNote}<p class="outlook-note faint">{outlookNote}</p>{/if}
         {#if summary.focusMin > 0 || summary.done > 0}
           <div class="row summary faint">
             <span class="when"><Icon name="ornaments/kawung-mark" size={10} /></span>
@@ -478,9 +512,24 @@
     padding: 2px 4px;
   }
 
-  .row.done .what {
+  .row.done .what,
+  .row.canceled .what {
     color: var(--faint);
     text-decoration: line-through;
+  }
+
+  .row.declined .what {
+    color: var(--faint);
+  }
+
+  .state {
+    flex: none;
+    font-size: var(--fs-caption);
+  }
+
+  .outlook-note {
+    margin: 8px 4px 0;
+    font-size: var(--fs-caption);
   }
 
   .when {

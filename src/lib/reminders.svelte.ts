@@ -79,9 +79,12 @@ function sameDay(a: number, b: Date) {
   return d.getFullYear() === b.getFullYear() && d.getMonth() === b.getMonth() && d.getDate() === b.getDate();
 }
 
-/** The next reminder still ahead today: the pill's "next up" and Peek's row. "Every N
-    minutes" nudges are left out; they would always be next. */
-export function nextToday(list: Reminder[], now: Date) {
+/** What counts as "next up": reminders, and Outlook meetings shaped like them. */
+export type Upcoming = Pick<Reminder, 'title' | 'at' | 'kind' | 'repeat' | 'taskId'>;
+
+/** The next reminder or meeting still ahead today: the pill's "next up" and Peek's row.
+    "Every N minutes" nudges are left out; they would always be next. */
+export function nextToday<T extends Upcoming>(list: T[], now: Date) {
   return list
     .filter((r) => r.repeat !== 'interval' && r.at >= now.getTime() && sameDay(r.at, now))
     .sort((a, b) => a.at - b.at)[0];

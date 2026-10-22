@@ -57,6 +57,8 @@ pub struct NoteSummary {
     date: i64,
     open_actions: u32,
     done_actions: u32,
+    /// The Outlook meeting a meeting note was started from (its `outlook:` key), or "".
+    outlook: String,
 }
 
 #[derive(Serialize)]
@@ -150,6 +152,7 @@ struct Parsed {
     date_key: Option<String>,
     open_actions: u32,
     done_actions: u32,
+    outlook: String,
 }
 
 fn parse(text: &str) -> Parsed {
@@ -183,6 +186,7 @@ fn parse(text: &str) -> Parsed {
         date_key: date_value.map(|d| d.chars().take(10).collect()),
         open_actions,
         done_actions,
+        outlook: if meeting { fields.get("outlook").cloned().unwrap_or_default() } else { String::new() },
     }
 }
 
@@ -327,6 +331,7 @@ pub async fn notes_list(folder: State<'_, NotesFolder>, query: Option<String>) -
                 topic: parsed.topic,
                 open_actions: parsed.open_actions,
                 done_actions: parsed.done_actions,
+                outlook: parsed.outlook,
             })
         })
         .collect();

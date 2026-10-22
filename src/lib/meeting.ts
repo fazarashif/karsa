@@ -20,12 +20,17 @@ export type Meeting = {
   rest: string;
   /** Header lines for keys Karsa does not use, verbatim. */
   extra: string[];
+  /** The Outlook meeting this note was started from (outlook.svelte.ts), or "". */
+  outlook: string;
 };
+
+/** A meeting note to create: its title and time, and what an Outlook meeting adds. */
+export type NewMeeting = { title: string; at: number; attendees?: string[]; outlook?: string };
 
 const TASK_MARK = /\s*<!--\s*karsa-task:(\d+)\s*-->\s*$/;
 const ITEM = /^\s*[-*]\s+\[( |x|X)\]\s?(.*)$/;
 
-const KNOWN_KEYS = ['type', 'title', 'date', 'topic', 'attendees'];
+const KNOWN_KEYS = ['type', 'title', 'date', 'topic', 'attendees', 'outlook'];
 
 function splitFrontMatter(text: string): { fields: Record<string, string>; extra: string[]; body: string } {
   const lines = text.split(/\r?\n/);
@@ -109,6 +114,7 @@ export function parseMeeting(text: string): Meeting {
     actions,
     rest,
     extra,
+    outlook: fields.outlook ?? '',
   };
 }
 
@@ -124,6 +130,7 @@ export function serializeMeeting(m: Meeting) {
     `date: ${m.date}`,
     `topic: ${q(m.topic.trim())}`,
     `attendees: [${m.attendees.map(q).join(', ')}]`,
+    ...(m.outlook ? [`outlook: ${m.outlook}`] : []),
     ...m.extra,
     '---',
     '',
@@ -151,8 +158,18 @@ export function fromLocalDateTime(value: string) {
   return new Date(y, mo - 1, d, h, mi).getTime();
 }
 
-export function newMeeting(title: string, at: number): string {
-  return serializeMeeting({ title, date: toLocalDateTime(at), topic: '', attendees: [], notes: '', actions: [], rest: '', extra: [] });
+export function newMeeting(m: NewMeeting): string {
+  return serializeMeeting({
+    title: m.title,
+    date: toLocalDateTime(m.at),
+    topic: '',
+    attendees: m.attendees ?? [],
+    notes: '',
+    actions: [],
+    rest: '',
+    extra: [],
+    outlook: m.outlook ?? '',
+  });
 }
 
 /** A plain note's title: its first line, without Markdown heading marks. */
