@@ -50,6 +50,8 @@
   --danger: var(--abang);
   --ornament: var(--sogan-deep);
   --priority: var(--kuningan);  /* v2: starred task */
+  --holiday: var(--abang);      /* M9: Sundays and public holidays, the tanggal merah ("tanggal abang") */
+  --holiday-leave: #F07A6AA6;   /* M9: cuti bersama, a softer abang (65%) */
   --focus-tint: #D4A84B29;
   --meeting-tint: #C0855229;
   --deadline-tint: #D9644A29;

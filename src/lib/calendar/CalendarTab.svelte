@@ -5,6 +5,7 @@
   import { addDays, agenda, daySummary, marks, monthGrid, sameDay, startOfDay, type AgendaItem, type Data } from '../calendar';
   import { clock } from '../clock.svelte';
   import Eyes from '../Eyes.svelte';
+  import { holidayOn } from '../holidays';
   import { focus } from '../focus.svelte';
   import { formatDate, formatTime, fromInputs, toDateInput, toTimeInput } from '../format.svelte';
   import Icon from '../Icon.svelte';
@@ -40,9 +41,11 @@
   const dayLabel = (d: Date) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' }).format(d);
 
   const itemKey = (item: AgendaItem) =>
-    item.kind === 'outlook'
-      ? `outlook-${item.meeting.key}`
-      : item.kind + ('task' in item ? item.task.id : 'reminder' in item ? item.reminder.id : item.note.path);
+    item.kind === 'holiday'
+      ? 'holiday'
+      : item.kind === 'outlook'
+        ? `outlook-${item.meeting.key}`
+        : item.kind + ('task' in item ? item.task.id : 'reminder' in item ? item.reminder.id : item.note.path);
 
   /** An Outlook meeting's time, place and organizer, for its tooltip. */
   function meetingDetail(m: OutlookMeeting) {
@@ -163,7 +166,7 @@
   </div>
 
   <div class="weekdays caps" aria-hidden="true">
-    {#each ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as d, i (i)}<span>{d}</span>{/each}
+    {#each ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as d, i (i)}<span class:sunday={i === 6}>{d}</span>{/each}
   </div>
 
   <div class="grid-wrap">
@@ -175,15 +178,20 @@
           {@const weekend = day.getDay() === 0 || day.getDay() === 6}
           {@const weton = specialDay(day, settings.current.birthday) === 'weton'}
           {@const count = [m.deadline, m.meeting, m.general].filter(Boolean).length}
+          {@const holiday = holidayOn(day)}
           <button
             class="day"
             class:other
             class:weekend
+            class:sunday={day.getDay() === 0}
+            class:holiday={holiday && !holiday.leave}
+            class:leave={holiday?.leave}
+            title={holiday ? `${holiday.name}${holiday.leave ? ' · cuti bersama' : ''}` : undefined}
             class:today={sameDay(day, today)}
             class:selected={sameDay(day, selected)}
             role="gridcell"
             aria-selected={sameDay(day, selected)}
-            aria-label="{dayLabel(day)}, {count} {count === 1 ? 'item' : 'items'}{weton ? ', weton' : ''}"
+            aria-label="{dayLabel(day)}{holiday ? `, ${holiday.name}${holiday.leave ? ' (cuti bersama)' : ''}` : ''}, {count} {count === 1 ? 'item' : 'items'}{weton ? ', weton' : ''}"
             onclick={() => select(day)}
           >
             <span class="date num">{day.getDate()}</span>
@@ -240,7 +248,13 @@
     {:else}
       <div class="scroll rows">
         {#each items as item (itemKey(item))}
-          {#if item.kind === 'late'}
+          {#if item.kind === 'holiday'}
+            <div class="row" class:leave={item.holiday.leave}>
+              <span class="when holiday-mark"><Icon name="ornaments/kawung-mark" size={10} /></span>
+              <span class="what ell holiday-name">{item.holiday.name}</span>
+              <span class="state faint">{item.holiday.leave ? 'Cuti bersama' : 'Public holiday'}</span>
+            </div>
+          {:else if item.kind === 'late'}
             <div class="row">
               <span class="when late caps">Late</span>
               <Checkbox checked={false} size={14} label="Done: {item.task.title}" onchange={() => todo.updateTask(item.task.id, { done: true })} />
@@ -392,6 +406,18 @@
     color: var(--muted);
   }
 
+  /* Tanggal merah, as on an Indonesian calendar: Sundays and public holidays in abang,
+     cuti bersama in a softer abang. */
+  .day.sunday .date,
+  .day.holiday .date,
+  .weekdays .sunday {
+    color: var(--holiday);
+  }
+
+  .day.leave .date {
+    color: var(--holiday-leave);
+  }
+
   .day.other .date {
     font-weight: 400;
     color: var(--disabled);
@@ -525,6 +551,16 @@
   .state {
     flex: none;
     font-size: var(--fs-caption);
+  }
+
+  .when.holiday-mark,
+  .holiday-name {
+    color: var(--holiday);
+  }
+
+  .row.leave .holiday-mark,
+  .row.leave .holiday-name {
+    color: var(--holiday-leave);
   }
 
   .outlook-note {

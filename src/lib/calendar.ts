@@ -4,6 +4,7 @@
  * long you focused, and each day's agenda. Pure functions over the stores' data; nothing
  * is fetched or kept.
  */
+import { holidayOn, type Holiday } from './holidays';
 import type { NoteSummary } from './notes.svelte';
 import type { OutlookMeeting } from './outlook.svelte';
 import type { Reminder } from './reminders.svelte';
@@ -111,6 +112,7 @@ export function marks(days: Date[], data: Data) {
 }
 
 export type AgendaItem =
+  | { kind: 'holiday'; holiday: Holiday }
   | { kind: 'late'; task: Task }
   | { kind: 'task'; task: Task; at: number | null }
   | { kind: 'reminder'; reminder: Reminder; at: number; note: NoteSummary | null }
@@ -118,12 +120,14 @@ export type AgendaItem =
   | { kind: 'note'; note: NoteSummary }
   | { kind: 'interval'; reminder: Reminder };
 
-/** One day's agenda, in design v2's order: late (today only), timed items by time,
-    untimed deadlines, then every-N reminders. */
+/** One day's agenda, in design v2's order: the day's holiday, late (today only), timed
+    items by time, untimed deadlines, then every-N reminders. */
 export function agenda(day: Date, today: Date, data: Data) {
   const start = startOfDay(day).getTime();
   const end = start + DAY;
   const items: AgendaItem[] = [];
+  const holiday = holidayOn(day);
+  if (holiday) items.push({ kind: 'holiday', holiday });
   if (sameDay(day, today)) {
     for (const t of data.tasks) {
       if (t.parentId === null && !t.done && t.dueAt !== null && t.dueAt < start) items.push({ kind: 'late', task: t });
