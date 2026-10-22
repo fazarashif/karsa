@@ -21,6 +21,7 @@
   import Alert from './lib/Alert.svelte';
   import Drop from './lib/Drop.svelte';
   import Panel from './lib/Panel.svelte';
+  import NowPlaying from './lib/nowplaying/NowPlaying.svelte';
   import Peek from './lib/Peek.svelte';
   import Pill, { type PillContent } from './lib/Pill.svelte';
 
@@ -37,14 +38,18 @@
   // Priority (requirements 4.2): alert waiting, a reminder within 15 minutes, the focus
   // timer, the next reminder today, then the eyes. Never the clock: the taskbar has it.
   // The notch sits over title bars all day, so it leaves later reminders to Peek.
+  // Lyric focus, while it sings, keeps the pill from reminders and meetings (their
+  // alerts still come); only an alert and a running focus timer go before it.
   const pillContent: PillContent = $derived.by(() => {
     // Only a waiting alert takes the pill; a new one first shows kaget eyes for a moment.
     if (alert && alertHeld) return { kind: 'alert', alert };
     const now = clock.now;
+    const playing = media.state;
+    const singing = settings.current.lyricsEnabled && settings.current.lyricFocus && playing.playing && lyrics.status === 'timed';
     const next = nextToday([...reminders.all, ...asUpcoming(outlook.meetings)], now);
     const minutes = next ? Math.ceil((next.at - now.getTime()) / 60_000) : Infinity;
     const color = next ? `var(--${next.kind})` : '';
-    if (next && minutes <= 15) {
+    if (next && minutes <= 15 && !singing) {
       return { kind: 'due', title: next.title, detail: `in ${Math.max(1, minutes)}m`, color };
     }
     const timer = focus.state;
@@ -58,12 +63,10 @@
         waiting: timer.status === 'waiting',
       };
     }
+    // Lyric focus: the line being sung in place of the title (design v2, 4.9), and a note
+    // while the music plays between lines.
+    if (singing) return { kind: 'lyric', line: lyrics.line, next: lyrics.next };
     if (next && !notch) return { kind: 'due', title: next.title, detail: formatTime(next.at), color };
-    // Lyric focus: the line being sung, in place of the title (design v2, 4.9).
-    const playing = media.state;
-    if (settings.current.lyricsEnabled && settings.current.lyricFocus && playing.playing && lyrics.status === 'timed' && lyrics.line) {
-      return { kind: 'lyric', line: lyrics.line };
-    }
     // What is playing, only while it plays: a track paused all afternoon is not news.
     if (settings.current.mediaInPill && playing.active && playing.playing) {
       return { kind: 'media', title: playing.title, artist: playing.artist, art: playing.art };
@@ -82,9 +85,15 @@
   /** The clickable area last sent to the core (plain, not reactive). */
   let region = { width: 0, height: 0 };
 
+  /** Peek opened while music played: it shows Now playing instead, until it closes (so
+      pausing from it does not swap the view). */
+  let peekMedia = $state(false);
+
   const box: Box = $derived(
     mode === 'idle'
       ? { width: pillWidth, ...(notch ? NOTCH : pillContent.kind === 'lyric' ? LYRIC : PILL) }
+      : mode === 'peek' && peekMedia
+        ? { ...SHAPE[panel.lyricsOpen ? 'nowplaying-lyrics' : 'nowplaying'], radius: BOX.expanded.radius }
       : mode === 'peek' && media.state.active
         ? { ...BOX.peek, height: BOX.peek.height + PEEK_MEDIA_ROW }
         : mode === 'expanded'
@@ -142,7 +151,10 @@
           lastGlance = now;
           setTimeout(() => react('mrengut', 1600), 160);
         }
-        hoverTimer = setTimeout(() => (mode = alert ? 'alert' : 'peek'), notch ? TIMING.hoverOpenNotch : TIMING.hoverOpen);
+        hoverTimer = setTimeout(() => {
+          peekMedia = !alert && media.state.playing;
+          mode = alert ? 'alert' : 'peek';
+        }, notch ? TIMING.hoverOpenNotch : TIMING.hoverOpen);
       }
     } else if (mode === 'peek' || (mode === 'alert' && alertHeld)) {
       hoverTimer = setTimeout(() => (mode = 'idle'), TIMING.hoverClose);
@@ -525,6 +537,8 @@
       <div class="layer" out:contentOut>
         {#if mode === 'idle'}
           <Pill content={pillContent} {notch} {blinkKey} onwidth={setPillWidth} onclick={onPillClick} />
+        {:else if mode === 'peek' && peekMedia}
+          <NowPlaying onclose={() => setMode('idle')} onpanel={() => void expand()} />
         {:else if mode === 'peek'}
           <Peek onclick={() => void expand()} />
         {:else if mode === 'alert' && alert}

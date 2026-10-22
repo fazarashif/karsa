@@ -77,9 +77,15 @@ export const lyrics = {
   get current() {
     return current;
   },
-  /** The line being sung, or empty. */
+  /** The line being sung, or empty (before the first line, and while the music plays
+      between lines). */
   get line() {
     return current >= 0 ? lines[current][1] : '';
+  },
+  /** The next line with words after the one being sung, or empty. */
+  get next() {
+    for (let i = current + 1; i < lines.length; i++) if (lines[i][1]) return lines[i][1];
+    return '';
   },
   get offsetMs() {
     return offsetMs;

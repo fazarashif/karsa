@@ -10,7 +10,16 @@
   import Switch from '../settings/Switch.svelte';
   import { panel } from '../ui.svelte';
 
-  let { onclose, onback }: { onclose: () => void; onback?: () => void } = $props();
+  let {
+    onclose,
+    onback,
+    onpanel,
+  }: {
+    onclose: () => void;
+    onback?: () => void;
+    /** Shown as Peek while music plays: opens the panel (the tabs). */
+    onpanel?: () => void;
+  } = $props();
 
   // Opened from the panel: Esc goes back to the tabs instead of closing the island.
   $effect(() => {
@@ -93,6 +102,12 @@
   <div class="source beat" style="--i: 0">
     {#if onback}
       <button class="ibtn back" aria-label="Back" title="Back (Esc)" onclick={onback}><Icon name="chevron-left" size={16} /></button>
+    {/if}
+    {#if onpanel}
+      <!-- Not "btn text": .text here is the title block, a column. -->
+      <button class="btn sm to-panel" title="Open the panel: tasks, notes, calendar and the rest" onclick={onpanel}>
+        <Eyes expression="melek" width={20} head="small" />Panel
+      </button>
     {/if}
     <button
       class="who"
@@ -568,7 +583,15 @@
 
   .line.now {
     font: var(--fw-semibold) 15px/24px var(--font-text);
-    color: var(--gading);
+    color: var(--accent);
+  }
+
+  .to-panel {
+    height: 28px;
+    gap: 6px;
+    padding: 0 8px 0 4px;
+    background: transparent;
+    color: var(--accent);
   }
 
   .plain {

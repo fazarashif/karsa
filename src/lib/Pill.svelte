@@ -8,7 +8,8 @@
     | { kind: 'due'; title: string; detail: string; color: string }
     | { kind: 'focus'; isBreak: boolean; time: string; minutesLeft: number; paused: boolean; waiting: boolean }
     | { kind: 'media'; title: string; artist: string; art: string }
-    | { kind: 'lyric'; line: string }
+    /** `line` is empty while the music plays between lines; `next` is the line after. */
+    | { kind: 'lyric'; line: string; next: string }
     | { kind: 'eyes'; expression: Expression };
 
   export const typeColor = (kind: AlertPayload['kind']) => `var(--${kind})`;
@@ -51,12 +52,18 @@
   });
   const progress = $derived(media.state.durationMs > 0 ? positionAt(media.state, now) / media.state.durationMs : 0);
 
-  /** Steps a lyric line down from 13 to 12 and 11 px before it has to be cut off. */
-  function fit(node: HTMLElement) {
+  /** Steps a lyric line down from 13 to 12 and 11 px before it is cut off. In the corner a
+      line still too long takes both rows, and the next line makes way for it. */
+  function fit(node: HTMLElement, wrap = false) {
+    const over = () => node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
     for (const size of [12, 11]) {
-      if (node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight) return;
+      if (!over()) return;
       node.style.fontSize = `${size}px`;
     }
+    if (!wrap || !over()) return;
+    node.dataset.wrap = '';
+    node.style.fontSize = '12px';
+    if (over()) node.style.fontSize = '11px';
   }
 
   const label = $derived.by(() => {
@@ -72,7 +79,7 @@
       case 'media':
         return `Karsa, playing ${content.title}${content.artist ? ` by ${content.artist}` : ''}`;
       case 'lyric':
-        return `Karsa, lyric: ${content.line}`;
+        return content.line ? `Karsa, lyric: ${content.line}` : 'Karsa, music playing';
       default:
         return 'Karsa, nothing due today';
     }
@@ -114,8 +121,16 @@
   {:else if content.kind === 'lyric'}
     <Eyes expression="nyanyi" width={eyesWidth} head={notch ? 'small' : 'eyes'} />
     <span class="lines">
-      {#key content.line}
-        <span class="label ell line" use:fit in:lyricIn out:lyricOut>{content.line}</span>
+      {#key `${content.line}\n${content.next}`}
+        <span class="verse" in:lyricIn out:lyricOut>
+          {#if content.line}
+            <span class="label ell now" use:fit={!notch}>{content.line}</span>
+          {:else}
+            <!-- The music between lines: a note, not the song's title. -->
+            <span class="melody"><Icon name="music" size={notch ? 12 : 14} /></span>
+          {/if}
+          {#if !notch && content.next}<span class="ell next">{content.next}</span>{/if}
+        </span>
       {/key}
     </span>
   {:else if content.kind === 'alert'}
@@ -225,26 +240,53 @@
     height: 18px;
   }
 
-  .line {
-    position: absolute;
-    inset: 0;
-    text-align: left;
-    line-height: 18px;
-  }
-
   .pill.lyric:not(.notch) .lines {
     height: 36px;
   }
 
-  /* One or two lines, centred in the corner pill. */
-  .pill.lyric:not(.notch) .line {
-    inset: 50% 0 auto;
-    translate: 0 -50%;
+  /* The line being sung in kuningan and, in the corner, the next one under it, muted.
+     Centred, so a single line sits in the middle. */
+  .verse {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+  }
+
+  .now,
+  .next {
+    line-height: 18px;
+  }
+
+  .now {
+    color: var(--accent);
+  }
+
+  .now:global([data-wrap]) {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     white-space: normal;
+  }
+
+  .now:global([data-wrap]) + .next {
+    display: none;
+  }
+
+  .next {
+    font-size: 12px;
+    font-weight: var(--fw-regular);
+    color: var(--muted);
+  }
+
+  .melody {
+    display: flex;
+    align-items: center;
+    height: 18px;
+    color: var(--accent);
   }
 
   /* Album art, as a small rounded square. */
