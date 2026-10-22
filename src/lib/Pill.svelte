@@ -51,6 +51,14 @@
   });
   const progress = $derived(media.state.durationMs > 0 ? positionAt(media.state, now) / media.state.durationMs : 0);
 
+  /** Steps a lyric line down from 13 to 12 and 11 px before it has to be cut off. */
+  function fit(node: HTMLElement) {
+    for (const size of [12, 11]) {
+      if (node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight) return;
+      node.style.fontSize = `${size}px`;
+    }
+  }
+
   const label = $derived.by(() => {
     switch (content.kind) {
       case 'alert':
@@ -107,7 +115,7 @@
     <Eyes expression="nyanyi" width={eyesWidth} head={notch ? 'small' : 'eyes'} />
     <span class="lines">
       {#key content.line}
-        <span class="label ell line" in:lyricIn out:lyricOut>{content.line}</span>
+        <span class="label ell line" use:fit in:lyricIn out:lyricOut>{content.line}</span>
       {/key}
     </span>
   {:else if content.kind === 'alert'}
@@ -196,14 +204,17 @@
     transform-origin: 0 0;
   }
 
-  /* Lyric focus: one line at a fixed width, so a new line never resizes the island. */
+  /* Lyric focus: a fixed size, so a new line never resizes the island. The corner has
+     room for two lines, the notch for one. */
   .pill.lyric {
     width: var(--lyric-max-w);
+    height: var(--lyric-h);
     max-width: none;
   }
 
   .pill.notch.lyric {
     width: var(--lyric-max-w-notch);
+    height: var(--notch-h);
     max-width: none;
   }
 
@@ -219,6 +230,21 @@
     inset: 0;
     text-align: left;
     line-height: 18px;
+  }
+
+  .pill.lyric:not(.notch) .lines {
+    height: 36px;
+  }
+
+  /* One or two lines, centred in the corner pill. */
+  .pill.lyric:not(.notch) .line {
+    inset: 50% 0 auto;
+    translate: 0 -50%;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
   }
 
   /* Album art, as a small rounded square. */

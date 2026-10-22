@@ -17,6 +17,10 @@ export const PILL = { height: 32, radius: 16 } as const;
     Must match `--notch-h` and `--radius-notch` in design/tokens.css. */
 export const NOTCH = { height: 26, radius: 12 } as const;
 
+/** The corner pill during lyric focus: wider, with room for two lines.
+    Must match `--lyric-h` and `--radius-lyric` in design/tokens.css. */
+export const LYRIC = { height: 52, radius: 20 } as const;
+
 /** Fixed sizes of the larger states. Each content component renders at exactly this size. */
 export const BOX: Record<Exclude<Mode, 'idle'>, Box> = {
   peek: { width: 320, height: 172, radius: 22 },

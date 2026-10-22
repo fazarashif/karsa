@@ -49,17 +49,6 @@
     session.edit(serializeMeeting($state.snapshot(m)));
   }
 
-  /** Grows a textarea with its content instead of scrolling inside it. */
-  function autosize(node: HTMLTextAreaElement) {
-    const fit = () => {
-      node.style.height = 'auto';
-      node.style.height = `${node.scrollHeight}px`;
-    };
-    fit();
-    node.addEventListener('input', fit);
-    return { destroy: () => node.removeEventListener('input', fit) };
-  }
-
   /** Esc inside a small inline field cancels that field only, not the whole view. */
   function stopEscape(e: KeyboardEvent, cancel: () => void) {
     if (e.key === 'Escape') {
@@ -180,7 +169,6 @@
     <span class="caps section">Notes</span>
     <textarea
       class="notes"
-      use:autosize
       bind:value={m.notes}
       oninput={changed}
       placeholder="- What was decided"
@@ -356,11 +344,18 @@
     margin: 12px 4px 4px;
   }
 
+  /* Grows with its text (also text loaded or reloaded from the file) up to 12 lines,
+     then scrolls inside with the panel's thin scrollbar. It never shrinks to make room:
+     the editor scrolls instead. */
   .notes {
+    flex: none;
+    field-sizing: content;
+    min-height: 48px;
+    max-height: 248px;
     padding: 4px;
     font: var(--fs-body) / 20px var(--font-text);
     resize: none;
-    overflow: hidden;
+    overflow-y: auto;
   }
 
   .ai-head {

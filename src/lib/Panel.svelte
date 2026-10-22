@@ -272,11 +272,14 @@
     transition: transform var(--dur-tab) var(--ease-standard);
   }
 
+  /* One column as wide as the panel: an auto column would grow to fit a long unwrapped
+     line, such as a note's title, and push the tab past the panel's edge. */
   .body {
     position: relative;
     flex: 1;
     min-height: 0;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     padding-top: 12px;
   }
 

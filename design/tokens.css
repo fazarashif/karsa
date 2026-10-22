@@ -30,6 +30,7 @@
   --checkbox-border: #EBEBF580;
   --edge: inset 0 0 0 1px #FFFFFF12;
   --edge-notch: inset 1px 0 0 #FFFFFF12, inset -1px 0 0 #FFFFFF12, inset 0 -1px 0 #FFFFFF12;
+  --shadow-notch: 0 2px 8px -1px #00000052; /* M8 feedback: the notch floats; stays inside the 10 px region padding */
   --focus-ring: #EFE6D2B3;
   --search-hit: #D4A84B3D;  /* v2: highlighted search match, 24% kuningan */
   --selected-bg: #FFFFFF1F; /* v2: selected calendar day, selected segment */
@@ -125,8 +126,10 @@
   --pill-progress-h: 2px;   /* v2: thin progress line inside the pill */
   --pill-art: 20px;         /* v2 */
   --notch-art: 16px;        /* v2 */
-  --lyric-max-w: 220px;     /* v2: corner */
-  --lyric-max-w-notch: 360px; /* v2 was 200; widened on the user's feedback (M8) */
+  --lyric-max-w: 320px;     /* v2 was 220 x 32; two lines on the user's feedback (M8) */
+  --lyric-h: 52px;          /* M8: corner lyric focus, two 18 px lines */
+  --radius-lyric: 20px;     /* M8 */
+  --lyric-max-w-notch: 440px; /* v2 was 200; widened twice on the user's feedback (M8) */
 
   /* Shapes (v2). w x h, all with --radius-panel unless noted. */
   --peek-w: 320px;    --peek-h: 172px;  --peek-media-h: 210px; /* v2: +26 with a Playing row */

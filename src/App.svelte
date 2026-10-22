@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { BOX, NOTCH, PEEK_MEDIA_ROW, PILL, SHAPE, TIMING, type Box, type Mode } from './lib/config';
+  import { BOX, LYRIC, NOTCH, PEEK_MEDIA_ROW, PILL, SHAPE, TIMING, type Box, type Mode } from './lib/config';
   import { core, emitLocal, inTauri, on, type AlertPayload } from './lib/bridge';
   import { clock } from './lib/clock.svelte';
   import { handleEscape } from './lib/escape';
@@ -83,7 +83,7 @@
 
   const box: Box = $derived(
     mode === 'idle'
-      ? { width: pillWidth, ...(notch ? NOTCH : PILL) }
+      ? { width: pillWidth, ...(notch ? NOTCH : pillContent.kind === 'lyric' ? LYRIC : PILL) }
       : mode === 'peek' && media.state.active
         ? { ...BOX.peek, height: BOX.peek.height + PEEK_MEDIA_ROW }
         : mode === 'expanded'
@@ -589,8 +589,9 @@
     translate: -50% 0;
   }
 
+  /* The notch alone gets a thin shadow, so it floats over what is under it. */
   .island.notch {
-    box-shadow: var(--edge-notch);
+    box-shadow: var(--edge-notch), var(--shadow-notch);
   }
 
   .notch .layer {

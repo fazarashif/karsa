@@ -27,7 +27,7 @@
 
 <span class="input picker" class:disabled>
   <Icon name={type === 'date' ? 'calendar' : 'clock'} size={16} />
-  <span class="shown" class:empty={!value}>{value ? display : placeholder}</span>
+  <span class="shown" class:unset={!value}>{value ? display : placeholder}</span>
   <input
     class="native"
     {type}
@@ -59,7 +59,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .shown.empty {
+  /* Not "empty": that is the global empty-state class, which centres its text. */
+  .shown.unset {
     color: var(--faint);
   }
 
