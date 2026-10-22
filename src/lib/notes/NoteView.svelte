@@ -11,11 +11,14 @@
 
   let {
     path,
+    project = '',
     layout,
     onback,
     ontitle,
   }: {
     path: string | null;
+    /** Where a new note goes ("" for no project). */
+    project?: string;
     layout: 'panel' | 'window';
     onback?: () => void;
     ontitle?: (title: string) => void;
@@ -29,7 +32,7 @@
     void (async () => {
       try {
         if (path) file = await notes.read(path);
-        session = new NoteSession(file?.path ?? null, file?.modified ?? null);
+        session = new NoteSession(file?.path ?? null, file?.modified ?? null, project);
       } catch (e) {
         error = String(e);
       }

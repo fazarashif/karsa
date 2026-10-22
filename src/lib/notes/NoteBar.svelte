@@ -4,7 +4,7 @@
   import { inTauri } from '../bridge';
   import { onEscape } from '../escape';
   import Icon from '../Icon.svelte';
-  import { notes, type NoteSession } from '../notes.svelte';
+  import { notes, projectOf, type NoteSession } from '../notes.svelte';
   import { panel } from '../ui.svelte';
 
   let {
@@ -17,6 +17,14 @@
 
   let menuOpen = $state(false);
   let confirmDelete = $state(false);
+  let moving = $state(false);
+  /** The note's project ("" for none). */
+  const here = $derived(session.path ? projectOf(session.path) : session.project);
+
+  // The projects can change in File Explorer, and a note window has not read them yet.
+  $effect(() => {
+    if (moving) void notes.refresh();
+  });
   let menu = $state<HTMLDivElement>();
   let error = $state('');
 
@@ -37,6 +45,17 @@
   function close() {
     menuOpen = false;
     confirmDelete = false;
+    moving = false;
+  }
+
+  async function moveTo(project: string) {
+    close();
+    try {
+      await session.moveTo(project);
+    } catch (e) {
+      error = String(e);
+      menuOpen = true;
+    }
   }
 
   /** Moves the note to its own window and closes the panel. */
@@ -72,6 +91,7 @@
   {#if layout === 'panel'}
     <button class="back" onclick={onback}><Icon name="chevron-left" size={16} />Notes</button>
   {/if}
+  {#if here}<span class="where ell" title="Project: {here}"><Icon name="folder" size={12} />{here}</span>{/if}
   <span class="grow"></span>
   {#if meeting}
     <span class="badge"><Icon name="meeting" size={12} />Meeting</span>
@@ -87,6 +107,20 @@
     </button>
     {#if menuOpen}
       <div class="menu" role="menu" bind:this={menu}>
+        <button class="mi" role="menuitem" aria-expanded={moving} onclick={() => (moving = !moving)}>
+          <Icon name="folder" size={16} /><span class="grow">Move to project</span><Icon name={moving ? 'chevron-up' : 'chevron-down'} size={12} />
+        </button>
+        {#if moving}
+          <div class="projects">
+            {#each ['', ...notes.projects] as project (project)}
+              <button class="mi sub" role="menuitemradio" aria-checked={project === here} onclick={() => moveTo(project)}>
+                <span class="grow ell" class:muted={!project}>{project || 'No project'}</span>
+                {#if project === here}<Icon name="check" size={14} />{/if}
+              </button>
+            {/each}
+          </div>
+          <div class="mdiv"></div>
+        {/if}
         <button class="mi" role="menuitem" disabled={!session.path} onclick={reveal}><Icon name="open-full" size={16} />Show in folder</button>
         {#if confirmDelete}
           <button class="mi danger" role="menuitem" onclick={remove}><Icon name="delete" size={16} />Confirm: move to Recycle Bin</button>
@@ -115,8 +149,27 @@
     font: var(--fw-semibold) var(--fs-caption) / 18px var(--font-text);
   }
 
+  .where {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 140px;
+    margin-left: 4px;
+    font-size: var(--fs-caption);
+    color: var(--faint);
+  }
+
   .more-wrap {
     position: relative;
+  }
+
+  .projects {
+    max-height: 168px;
+    overflow-y: auto;
+  }
+
+  .mi.sub {
+    padding-left: 34px;
   }
 
   .menu {

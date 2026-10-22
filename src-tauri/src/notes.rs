@@ -4,6 +4,10 @@
 //! Plain notes are just text, titled by their first line. Meeting notes carry a small
 //! YAML header (type, title, date, topic, attendees) and live in `Meetings/`. File names
 //! follow the title (and the meeting date), and are renamed when those change.
+//!
+//! Projects are the folders directly inside the notes folder (all but `Meetings` and
+//! hidden ones), laid out the same way: `Project/Title.md` and
+//! `Project/Meetings/YYYY-MM-DD Title.md`. A folder made in File Explorer is a project too.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -59,6 +63,8 @@ pub struct NoteSummary {
     done_actions: u32,
     /// The Outlook meeting a meeting note was started from (its `outlook:` key), or "".
     outlook: String,
+    /// The project (folder) it is in, or "" for none.
+    project: String,
 }
 
 #[derive(Serialize)]
@@ -210,6 +216,61 @@ fn relative(folder: &Path, path: &Path) -> String {
     path.strip_prefix(folder).unwrap_or(path).to_string_lossy().replace('\\', "/")
 }
 
+/// The project a note is in: the folder it sits in under the notes folder, or "" for notes
+/// at the top (and in the top `Meetings` folder).
+fn project_of(rel: &str) -> String {
+    match rel.split_once('/') {
+        Some((first, _)) if !first.eq_ignore_ascii_case("Meetings") => first.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// A project name the UI sent, as a folder name; "" is no project (the notes folder).
+fn checked_project(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(String::new());
+    }
+    if name.starts_with('.') || name.eq_ignore_ascii_case("Meetings") || file_stem(name) != name {
+        return Err("Pick another name: without \\ / : * ? \" < > |, and not Meetings".into());
+    }
+    Ok(name.to_string())
+}
+
+fn project_dir(folder: &Path, project: &str) -> PathBuf {
+    if project.is_empty() {
+        folder.to_path_buf()
+    } else {
+        folder.join(project)
+    }
+}
+
+/// The projects: folders directly inside the notes folder, but not `Meetings` or hidden ones.
+fn projects(folder: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| !name.starts_with('.') && !name.eq_ignore_ascii_case("Meetings"))
+        .collect();
+    names.sort_by_key(|name| name.to_lowercase());
+    names
+}
+
+/// Moves a file or folder to the Recycle Bin, so a mistaken delete can be undone.
+fn recycle(path: &Path) -> bool {
+    let from: Vec<u16> = path.as_os_str().encode_wide_null2();
+    unsafe {
+        let mut op: SHFILEOPSTRUCTW = zeroed();
+        op.wFunc = FO_DELETE as _;
+        op.pFrom = from.as_ptr();
+        op.fFlags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI) as _;
+        SHFileOperationW(&mut op) == 0
+    }
+}
+
 fn modified_ms(path: &Path) -> i64 {
     fs::metadata(path)
         .and_then(|m| m.modified())
@@ -240,7 +301,8 @@ fn file_stem(title: &str) -> String {
     }
 }
 
-/// Where a note with this content belongs: `Title.md`, or `Meetings/YYYY-MM-DD Title.md`.
+/// Where a note with this content belongs in a project's folder (or the notes folder):
+/// `Title.md`, or `Meetings/YYYY-MM-DD Title.md`.
 fn desired_path(folder: &Path, parsed: &Parsed) -> PathBuf {
     let stem = file_stem(&parsed.title);
     if parsed.meeting {
@@ -332,6 +394,7 @@ pub async fn notes_list(folder: State<'_, NotesFolder>, query: Option<String>) -
                 open_actions: parsed.open_actions,
                 done_actions: parsed.done_actions,
                 outlook: parsed.outlook,
+                project: project_of(&relative(folder, &path)),
             })
         })
         .collect();
@@ -348,8 +411,10 @@ pub fn notes_read(folder: State<'_, NotesFolder>, path: String) -> Result<NoteFi
 
 /// Saves a note and renames its file to follow the title (and meeting date). With
 /// `base_modified`, refuses ("conflict") if the file changed on disk since it was read,
-/// unless `force` is set.
+/// unless `force` is set. A new note goes into `project` ("" or none: no project); a
+/// saved one stays in its own.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn notes_save(
     app: AppHandle,
     folder: State<'_, NotesFolder>,
@@ -358,6 +423,7 @@ pub fn notes_save(
     content: String,
     base_modified: Option<i64>,
     force: bool,
+    project: Option<String>,
 ) -> Result<Saved, String> {
     let folder = &folder.get();
     let current = path.as_deref().map(|p| resolve(folder, p)).transpose()?;
@@ -366,7 +432,12 @@ pub fn notes_save(
             return Err("conflict".into());
         }
     }
-    let target = unique_path(desired_path(folder, &parse(&content)), current.as_deref());
+    let project = match (&path, project) {
+        (Some(rel), _) => project_of(rel),
+        (None, Some(name)) => checked_project(&name)?,
+        (None, None) => String::new(),
+    };
+    let target = unique_path(desired_path(&project_dir(folder, &project), &parse(&content)), current.as_deref());
     write_atomic(&target, &content).map_err(|e| format!("Could not save the note: {e}"))?;
     let new_rel = relative(folder, &target);
     if let (Some(current), Some(old_rel)) = (&current, &path) {
@@ -384,19 +455,111 @@ pub fn notes_save(
 #[tauri::command]
 pub fn notes_delete(app: AppHandle, folder: State<'_, NotesFolder>, path: String) -> Result<(), String> {
     let full = resolve(&folder.get(), &path)?;
-    let from: Vec<u16> = full.as_os_str().encode_wide_null2();
-    let result = unsafe {
-        let mut op: SHFILEOPSTRUCTW = zeroed();
-        op.wFunc = FO_DELETE as _;
-        op.pFrom = from.as_ptr();
-        op.fFlags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI) as _;
-        SHFileOperationW(&mut op)
-    };
-    if result != 0 {
+    if !recycle(&full) {
         return Err("Could not move the note to the Recycle Bin".into());
     }
     notify(&app);
     Ok(())
+}
+
+/// Moves a note into another project's folder ("" for none), keeping its name unless one
+/// there already has it. Tasks added from the note keep pointing at it.
+#[tauri::command]
+pub fn notes_move(
+    app: AppHandle,
+    folder: State<'_, NotesFolder>,
+    db: State<'_, Db>,
+    path: String,
+    project: String,
+) -> Result<Saved, String> {
+    let folder = &folder.get();
+    let current = resolve(folder, &path)?;
+    let project = checked_project(&project)?;
+    let content = fs::read_to_string(&current).map_err(|_| "This note no longer exists".to_string())?;
+    let target = unique_path(desired_path(&project_dir(folder, &project), &parse(&content)), Some(&current));
+    let new_rel = relative(folder, &target);
+    if !same_path(&current, &target) {
+        if let Some(dir) = target.parent() {
+            fs::create_dir_all(dir).map_err(|e| format!("Could not move the note: {e}"))?;
+        }
+        fs::rename(&current, &target).map_err(|e| format!("Could not move the note: {e}"))?;
+        let _ = db.conn().execute("UPDATE tasks SET note_path = ?1 WHERE note_path = ?2", params![new_rel, path]);
+    }
+    notify(&app);
+    Ok(Saved { modified: modified_ms(&target), path: new_rel })
+}
+
+#[tauri::command]
+pub fn notes_projects(folder: State<'_, NotesFolder>) -> Vec<String> {
+    projects(&folder.get())
+}
+
+/// Makes a project: a new folder in the notes folder.
+#[tauri::command]
+pub fn notes_project_create(app: AppHandle, folder: State<'_, NotesFolder>, name: String) -> Result<Vec<String>, String> {
+    let folder = folder.get();
+    let name = checked_project(&name)?;
+    if name.is_empty() {
+        return Err("Name the project".into());
+    }
+    if projects(&folder).iter().any(|p| p.eq_ignore_ascii_case(&name)) {
+        return Err("There is already a project with this name".into());
+    }
+    fs::create_dir_all(folder.join(&name)).map_err(|e| format!("Could not make the folder: {e}"))?;
+    notify(&app);
+    Ok(projects(&folder))
+}
+
+/// Renames a project's folder. Tasks added from its notes keep pointing at them.
+#[tauri::command]
+pub fn notes_project_rename(
+    app: AppHandle,
+    folder: State<'_, NotesFolder>,
+    db: State<'_, Db>,
+    name: String,
+    new_name: String,
+) -> Result<Vec<String>, String> {
+    let folder = folder.get();
+    let (from, to) = (checked_project(&name)?, checked_project(&new_name)?);
+    if from.is_empty() || to.is_empty() {
+        return Err("Name the project".into());
+    }
+    if from != to {
+        // Only a change of case may reuse an existing name: its own.
+        if !from.eq_ignore_ascii_case(&to) && projects(&folder).iter().any(|p| p.eq_ignore_ascii_case(&to)) {
+            return Err("There is already a project with this name".into());
+        }
+        fs::rename(folder.join(&from), folder.join(&to)).map_err(|e| format!("Could not rename the folder: {e}"))?;
+        let (old_prefix, new_prefix) = (format!("{from}/"), format!("{to}/"));
+        let _ = db.conn().execute(
+            "UPDATE tasks SET note_path = ?1 || substr(note_path, ?2) WHERE substr(note_path, 1, ?3) = ?4",
+            params![new_prefix, old_prefix.chars().count() as i64 + 1, old_prefix.chars().count() as i64, old_prefix],
+        );
+        notify(&app);
+    }
+    Ok(projects(&folder))
+}
+
+/// Deletes an empty project (its folder goes to the Recycle Bin). One with notes in it
+/// is refused: its notes are moved or deleted first.
+#[tauri::command]
+pub fn notes_project_delete(app: AppHandle, folder: State<'_, NotesFolder>, name: String) -> Result<Vec<String>, String> {
+    let folder = folder.get();
+    let name = checked_project(&name)?;
+    if name.is_empty() {
+        return Err("Name the project".into());
+    }
+    let dir = folder.join(&name);
+    let mut inside = Vec::new();
+    collect(&dir, 3, &mut inside);
+    if !inside.is_empty() {
+        return Err("Move or delete its notes first".into());
+    }
+    if dir.exists() && !recycle(&dir) {
+        return Err("Could not move the folder to the Recycle Bin".into());
+    }
+    notify(&app);
+    Ok(projects(&folder))
 }
 
 /// Shows the note's file selected in File Explorer.

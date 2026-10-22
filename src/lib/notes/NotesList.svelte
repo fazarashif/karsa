@@ -4,20 +4,32 @@
   import { dayFromToday, formatTime } from '../format.svelte';
   import Icon from '../Icon.svelte';
   import { notes, type NoteSummary } from '../notes.svelte';
+  import ProjectMenu from './ProjectMenu.svelte';
 
   let {
     error,
     onopen,
     onnewnote,
     onnewmeeting,
-  }: { error: string; onopen: (path: string) => void; onnewnote: () => void; onnewmeeting: () => void } = $props();
+    onmanage,
+  }: {
+    error: string;
+    onopen: (path: string) => void;
+    onnewnote: () => void;
+    onnewmeeting: () => void;
+    onmanage: () => void;
+  } = $props();
 
   type Filter = 'all' | 'note' | 'meeting';
   let filter = $state<Filter>('all');
   let menuOpen = $state(false);
   let menu = $state<HTMLDivElement>();
+  let projectMenu = $state(false);
 
-  const shown = $derived(notes.list.filter((n) => filter === 'all' || n.kind === filter));
+  /** The notes of the project shown (all of them while no project is picked). */
+  const inProject = $derived(notes.list.filter((n) => notes.selected === null || n.project === notes.selected));
+  const shown = $derived(inProject.filter((n) => filter === 'all' || n.kind === filter));
+  const where = $derived(notes.selected === null ? 'All notes' : notes.selected || 'No project');
 
   $effect(() => {
     if (!menuOpen) return;
@@ -52,6 +64,32 @@
 </script>
 
 <div class="view">
+  <div class="tbar">
+    <div class="switch-wrap">
+      <button
+        class="switch"
+        class:open={projectMenu}
+        aria-haspopup="menu"
+        aria-expanded={projectMenu}
+        onclick={() => (projectMenu = !projectMenu)}
+      >
+        {#if notes.selected}<Icon name="folder" size={14} />{/if}
+        <span class="ell">{where}</span>
+        <Icon name="chevron-down" size={12} />
+      </button>
+      {#if projectMenu}
+        <ProjectMenu
+          onclose={() => (projectMenu = false)}
+          onmanage={() => {
+            projectMenu = false;
+            onmanage();
+          }}
+        />
+      {/if}
+    </div>
+    <span class="meta">{inProject.length} {inProject.length === 1 ? 'note' : 'notes'}</span>
+  </div>
+
   <div class="toolbar">
     <label class="input sm search">
       <Icon name="search" size={16} />
@@ -95,7 +133,10 @@
         <span class="muted">Nothing in your notes mentions “{notes.query.trim()}”.</span>
       {:else}
         <span class="proverb">No notes yet</span>
-        <span class="muted">Start one with New. Notes are Markdown files in Documents\Karsa\Notes.</span>
+        <span class="muted">
+          {#if notes.selected}Start one with New: it goes into the {notes.selected} folder.
+          {:else}Start one with New. Notes are Markdown files in Documents\Karsa\Notes.{/if}
+        </span>
       {/if}
     </div>
   {:else}
@@ -105,6 +146,7 @@
           <span class="line">
             {#if note.kind === 'meeting'}<span style:color="var(--meeting)"><Icon name="meeting" size={12} /></span>{/if}
             <span class="title ell grow">{note.title}</span>
+            {#if notes.selected === null && note.project}<span class="tag ell">{note.project}</span>{/if}
             <span class="meta">{when(note)}</span>
           </span>
           <span class="line meta" class:indent={note.kind === 'meeting'}>
@@ -126,9 +168,49 @@
 </div>
 
 <style>
+  /* The project switcher, as Todo's list switcher. */
+  .tbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    margin-bottom: 8px;
+    padding: 0 4px;
+  }
+
+  .switch-wrap {
+    position: relative;
+    min-width: 0;
+  }
+
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 240px;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    margin-left: -8px;
+    border-radius: 8px;
+    font-weight: var(--fw-semibold);
+    transition: background-color var(--dur-fast) var(--ease-standard);
+  }
+
+  .switch:hover,
+  .switch.open {
+    background: var(--surface);
+  }
+
   .toolbar {
     display: flex;
     gap: 8px;
+  }
+
+  .tag {
+    flex: none;
+    max-width: 96px;
+    font-size: var(--fs-caption);
+    color: var(--faint);
   }
 
   .search {

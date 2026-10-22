@@ -160,6 +160,11 @@ fn main() {
             media::media_control,
             lyrics::lyrics_get,
             lyrics::lyrics_offset,
+            notes::notes_move,
+            notes::notes_projects,
+            notes::notes_project_create,
+            notes::notes_project_rename,
+            notes::notes_project_delete,
             outlook::outlook_state,
             outlook::outlook_refresh,
         ])

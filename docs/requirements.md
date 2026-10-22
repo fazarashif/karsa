@@ -424,6 +424,15 @@ The calendar shows Indonesia's red dates, as a printed Indonesian calendar does.
 - **Agenda:** a holiday's day starts with a row in abang: a kawung mark, the name (in Indonesian, as the decree has it, e.g. "Idulfitri 1447 H") and "Public holiday" or "Cuti bersama".
 - **Data** (`src/lib/holidays.ts`, nothing fetched): the fixed holidays (1 Jan, 1 May, 1 Jun, 17 Aug, 25 Dec) and the Easter ones (Wafat Yesus Kristus, Paskah, Kenaikan Yesus Kristus, from Easter by Meeus's algorithm) for any year; the holidays the government sets each year (Isra Mikraj, Imlek, Nyepi, Idulfitri, Iduladha, Waisak, Tahun Baru Islam, Maulid) and all cuti bersama only for the years listed, from the SKB 3 Menteri: 2025 (17 holidays, 10 cuti bersama and the 18 August 2025 one added that August), 2026 (17 and 8) and 2027 (18 and 8; signed 15 September 2026, with Isra Mikraj twice). A new year is added by hand when its decree comes out, usually in September; until then that year shows only the fixed and Easter holidays.
 
+### 6e.4 Note projects
+
+Notes can be sorted into projects, as tasks are into lists, and each project is a folder in the notes folder, so File Explorer shows the same grouping.
+
+- **On disk** (`notes.rs`): a project is a folder directly inside the notes folder, laid out like the notes folder itself: `Project/Title.md` and `Project/Meetings/YYYY-MM-DD Title.md`. Notes at the top (and in the top `Meetings`) have no project. Every folder there except `Meetings` and hidden ones is a project, so one made in File Explorer shows up too. Names follow the file name rules (no `\ / : * ? " < > |`, not `Meetings`), and two projects cannot differ only in case.
+- **The Notes list:** a switcher above the search, as Todo's list switcher: All notes, No project, then each project with its count; New project; Manage projects. With All notes, each note shows its project as a small tag. New note and New meeting note go into the project shown (none from All notes). Meeting notes started from Outlook or a reminder go to no project.
+- **A note's project:** the editor's bar shows it (a folder mark and the name), and More → Move to project moves the file (saving what was typed first). A title change renames the file inside its project.
+- **Manage projects:** rename (the folder is renamed), delete (only an empty project; its folder goes to the Recycle Bin) and add. Tasks added from a meeting note keep their link through a move or a rename.
+
 ## 7. Data and storage
 
 | Data | Location |
@@ -463,7 +472,7 @@ The notes folder can be pointed at OneDrive or Google Drive for backup and sync.
 | M6 | Personal companion and tools | Name, weton and paribasan; expressive mripat; focus kain and streak; Rampung ritual; quick capture hotkey; 24 h clipboard history; file shelf; media controls; idle cost unchanged | Done 2026-10-20 (v0.2.0) |
 | M7 | The notch | Settings choose Bottom right or Top; on top, a slim notch with the eyes when idle that grows downwards into every state; switching needs no restart | Done 2026-10-21, open to revision after use |
 | M8 | Now playing and calendar | All media sessions with seek, shuffle/repeat and volume where the app supports them; the source app (and site, when it can be told); opt-in timed lyrics from LRCLIB; a Karsa calendar with deadlines, reminders, meetings and focus per day; design v2's shapes and character (6d) | Done 2026-10-21 except the optional equalizer (6d.7) |
-| M9 | Outlook meetings and tanggal merah | Meetings from classic Outlook on this PC (read only, COM) in the calendar, Peek and the pill; a meeting note per meeting that starts filled in; a meeting alert a chosen time before; Sundays, public holidays and cuti bersama marked in the calendar (6e) | Built 2026-10-22 |
+| M9 | Outlook meetings, tanggal merah and note projects | Meetings from classic Outlook on this PC (read only, COM) in the calendar, Peek and the pill; a meeting note per meeting that starts filled in; a meeting alert a chosen time before; Sundays, public holidays and cuti bersama marked in the calendar; notes sorted into projects, each a folder (6e) | Built 2026-10-22 |
 | M10 | UX playbook | Design v2's section 4 for the features that already exist: live Markdown, autosave and task links in notes; "Last time" and inline action items in meeting notes; natural dates, stars, drag and undo in Todo; quick focus lengths and the even kain; type-to-search and pins in the shelf; quick capture as a card; the Rampung closing moment; the v2 selector system and 28 px buttons | Planned (was M9) |
 
 ## 11. Decision log
@@ -508,6 +517,8 @@ The notes folder can be pointed at OneDrive or Google Drive for backup and sync.
 | 2026-10-22 | Lyric focus and reminders | While lyric focus sings it keeps the pill from reminders and meetings (alerts still come); a running focus timer still goes first |
 | 2026-10-22 | Lyric focus between lines | A music note in the pill, not the song's title |
 | 2026-10-22 | Peek while music plays | Now playing, with a "Panel" button; the usual Peek when paused or silent |
+| 2026-10-22 | What a note project is | A folder in the notes folder, read from disk each time (no database table), so File Explorer and Karsa always agree; the top `Meetings` folder and hidden folders are not projects |
+| 2026-10-22 | Deleting a note project | Only when empty, to the Recycle Bin; a project with notes asks for them to be moved or deleted first |
 | 2026-10-22 | Milestone order | Outlook meetings became M9; the UX playbook moved to M10 |
 | 2026-10-21 | Lyric focus size | On the user's feedback: the notch 440 px wide (design v2 200, then 360), the corner 320 × 52 with two rows (design v2 220 × 32, one row); text steps down to 11 px before an ellipsis |
 | 2026-10-21 | A shadow under the notch | On the user's request, so the notch floats; first a thin one (9 px), which hardly showed. The user's screen is dark under the notch, where no shadow shows, so it became a light 1 px hairline plus a denser shadow reaching 17 px, with the notch's region padding raised to 18 px. The corner pill keeps only its edge |
